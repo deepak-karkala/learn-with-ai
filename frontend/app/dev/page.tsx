@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import ApiTest from '@/components/dev/ApiTest'
+import ApiTest from '../../components/dev/ApiTest'
 
 export default function DevPage() {
   if (process.env.NODE_ENV === 'production') {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { apiService } from '@/lib/api'
+import { apiService } from '../../lib/api'
 
 interface ApiTestProps {
   className?: string

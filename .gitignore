@@ -1,0 +1,222 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# uv
+.uv/
+# Note: uv.lock should be committed (like package-lock.json)
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Next.js
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
+# Testing
+coverage/
+*.coverage
+.coverage.*
+.cache
+.nyc_output
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+junit.xml
+test-results/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary folders and files
+tmp/
+temp/
+.tmp/
+.temp/
+*.tmp
+*.temp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Google Cloud and ADK
+.gcloud/
+.config/gcloud/
+service-account-key.json
+*.json.key
+gcp-key.json
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+# Allow .env.example files to be committed
+!.env.example
+
+# Context folder (development planning documents)
+context/
+
+# Deployment
+.vercel/
+.netlify/
+.firebase/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Certificates
+*.pem
+*.key
+*.crt
+*.cer
+
+# Build outputs
+build/
+dist/
+public/build/
+
+# Static files
+static/
+public/uploads/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Editor specific
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# User-specific files
+test_setup.py
+
+# Development server files
+# Note: run_dev.py should be committed
+
+# Temporary deployment URLs (will change on each deploy)
+.deployment-urls
+
+# Local development overrides
+.env.local.backup

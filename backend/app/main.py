@@ -30,13 +30,13 @@ app.add_middleware(
 
 
 @app.get("/")
-async def root():
+async def root() -> dict:
     """Root endpoint"""
     return {"message": "AI System Design Learning Platform API"}
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict:
     """Health check endpoint"""
     return {
         "status": "healthy",
@@ -46,7 +46,7 @@ async def health_check():
 
 
 @app.get("/api/health")
-async def api_health_check():
+async def api_health_check() -> dict:
     """API health check endpoint"""
     return {
         "status": "healthy",

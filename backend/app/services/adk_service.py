@@ -4,13 +4,13 @@ ADK Service for managing agents and sessions using Google ADK.
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from google.adk.agents import Agent, LiveRequestQueue
-
-# from google.adk.sessions import InMemorySessionService  # Not directly used
 from google.adk.agents.run_config import RunConfig
 from google.adk.runners import InMemoryRunner
+
+# from google.adk.sessions import InMemorySessionService  # Not directly used
 from google.genai.types import Content, Part
 from pydantic import BaseModel
 
@@ -41,12 +41,12 @@ class ADKService:
     Service for managing Google ADK agents and sessions.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the ADK service"""
-        self.session_service = None
-        self.runner = None
-        self.agent = None
-        self.app_name = "systemdesign-ai-platform"
+        self.session_service: Optional[Any] = None
+        self.runner: Optional[InMemoryRunner] = None
+        self.agent: Optional[Agent] = None
+        self.app_name: str = "systemdesign-ai-platform"
         self._initialize_adk()
 
     def _configure_environment(self) -> None:

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
 
     # ADK Agent Configuration
     adk_model_name: str = "gemini-2.0-flash-exp"
+    adk_streaming_timeout: float = 30.0  # Timeout for streaming responses in seconds
+    adk_max_events: int = 100  # Maximum events to process per request
+    adk_max_connections: int = 10  # Maximum connections in connection pool
+    adk_connection_health_timeout: float = 300.0  # Connection health timeout in seconds
 
     # Application Configuration
     debug: bool = False
@@ -68,7 +72,11 @@ def setup_logging(settings: Settings) -> None:
         log_level = logging.INFO
         # Use stderr for early warnings before logging is configured
         import sys
-        print(f"Warning: Invalid log level '{settings.log_level}', defaulting to INFO", file=sys.stderr)
+
+        print(
+            f"Warning: Invalid log level '{settings.log_level}', defaulting to INFO",
+            file=sys.stderr,
+        )
     else:
         log_level = valid_log_levels[log_level_upper]
 

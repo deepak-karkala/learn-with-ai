@@ -5,6 +5,7 @@ ADK Service for managing agents and sessions using Google ADK.
 import asyncio
 import logging
 import os
+import time
 import warnings
 from typing import Any, Dict, Optional
 from weakref import WeakValueDictionary
@@ -51,11 +52,23 @@ class ADKService:
         self.app_name: str = "systemdesign-ai-platform"
         self._env_configured: bool = False  # Track if environment is already configured
 
-        # Connection pooling for performance
+        # Connection pooling for performance with proper limits
         self._runner_pool: Dict[str, InMemoryRunner] = {}
         self._pool_lock = asyncio.Lock()
-        self._max_pool_size = 10
+        self._max_pool_size = settings.adk_max_connections
         self._sessions: WeakValueDictionary = WeakValueDictionary()
+
+        # Timeout configuration for streaming responses (configurable)
+        self._streaming_timeout = settings.adk_streaming_timeout
+        self._max_events = settings.adk_max_events
+
+        # Reusable objects to avoid creating new instances for each request
+        self._text_run_config: Optional[RunConfig] = None
+
+        # LiveRequestQueue pool for connection reuse with health tracking
+        self._queue_pool: Dict[str, LiveRequestQueue] = {}
+        self._queue_pool_lock = asyncio.Lock()
+        self._queue_health: Dict[str, float] = {}  # Track last successful use
 
         self._initialize_adk()
 
@@ -67,7 +80,9 @@ class ADKService:
         # ADK expects these environment variables to be set
         if settings.google_api_key:
             os.environ["GOOGLE_API_KEY"] = settings.google_api_key
-            logger.debug("Set GOOGLE_API_KEY environment variable (key masked for security)")
+            logger.debug(
+                "Set GOOGLE_API_KEY environment variable (key masked for security)"
+            )
 
         if settings.google_genai_use_vertexai:
             os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
@@ -146,12 +161,123 @@ You have access to the conversation history through the session state. Use this 
             )
             logger.info(f"Agent '{self.agent.name}' created successfully")
 
+            # Initialize reusable objects for better performance
+            self._initialize_reusable_objects()
+
             # Session service will be initialized per-chat for proper live sessions
             logger.info("ADK service initialized - sessions will be created per chat")
 
         except Exception as e:
             logger.error(f"Failed to initialize ADK service: {str(e)}", exc_info=True)
             raise
+
+    def _initialize_reusable_objects(self) -> None:
+        """Initialize objects that can be reused across requests for better performance"""
+        try:
+            # Create reusable RunConfig for text responses
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore", category=UserWarning, module="pydantic"
+                )
+                self._text_run_config = RunConfig(response_modalities=["TEXT"])
+            logger.debug("Initialized reusable RunConfig for text responses")
+        except Exception as e:
+            logger.warning(f"Failed to initialize reusable objects: {e}")
+            # Fall back to creating objects per request if initialization fails
+            self._text_run_config = None
+
+    def _create_user_content(self, message: str) -> Content:
+        """Create user content object efficiently"""
+        return Content(role="user", parts=[Part.from_text(text=message)])
+
+    def _get_run_config(self) -> RunConfig:
+        """Get reusable RunConfig or create new one if needed"""
+        if self._text_run_config is not None:
+            return self._text_run_config
+
+        # Fallback: create new RunConfig if reusable one failed to initialize
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+            return RunConfig(response_modalities=["TEXT"])
+
+    def _is_queue_healthy(self, session_id: str) -> bool:
+        """Check if a queue connection is still healthy based on last use time"""
+        if session_id not in self._queue_health:
+            return False
+
+        last_use = self._queue_health[session_id]
+        current_time = time.time()
+        timeout = settings.adk_connection_health_timeout
+
+        # Consider connection stale if not used within timeout period
+        is_healthy = (current_time - last_use) < timeout
+
+        if not is_healthy:
+            logger.debug(
+                f"Queue for session {session_id} is stale (last use: {current_time - last_use:.1f}s ago)"
+            )
+
+        return is_healthy
+
+    def _mark_queue_healthy(self, session_id: str) -> None:
+        """Mark a queue as healthy by updating its last use time"""
+        self._queue_health[session_id] = time.time()
+
+    async def _get_or_create_queue(self, session_id: str) -> LiveRequestQueue:
+        """Get an existing LiveRequestQueue from pool or create a new one with health checks"""
+        async with self._queue_pool_lock:
+            # Try to reuse an existing queue for this session if healthy
+            if session_id in self._queue_pool and self._is_queue_healthy(session_id):
+                logger.debug(
+                    f"Reusing healthy LiveRequestQueue for session {session_id}"
+                )
+                queue = self._queue_pool[session_id]
+                self._mark_queue_healthy(session_id)  # Update health timestamp
+                return queue
+
+            # Remove unhealthy queue if it exists
+            if session_id in self._queue_pool:
+                logger.debug(f"Removing unhealthy queue for session {session_id}")
+                try:
+                    self._queue_pool[session_id].close()
+                except Exception as e:
+                    logger.warning(f"Error closing unhealthy queue: {e}")
+                del self._queue_pool[session_id]
+                if session_id in self._queue_health:
+                    del self._queue_health[session_id]
+
+            # Create new queue if pool not full
+            if len(self._queue_pool) < self._max_pool_size:
+                logger.debug(f"Creating new LiveRequestQueue for session {session_id}")
+                queue = LiveRequestQueue()
+                self._queue_pool[session_id] = queue
+                self._mark_queue_healthy(session_id)  # Mark as healthy
+                return queue
+
+            # Pool is full, create temporary queue (not pooled)
+            logger.debug(
+                f"Queue pool full ({len(self._queue_pool)}/{self._max_pool_size}), creating temporary LiveRequestQueue for session {session_id}"
+            )
+            return LiveRequestQueue()
+
+    async def _cleanup_queue(self, session_id: str) -> None:
+        """Clean up queue resources after use"""
+        async with self._queue_pool_lock:
+            if session_id in self._queue_pool:
+                queue = self._queue_pool[session_id]
+                try:
+                    queue.close()  # Close the queue properly
+                    del self._queue_pool[session_id]
+                    # Also clean up health tracking
+                    if session_id in self._queue_health:
+                        del self._queue_health[session_id]
+                    logger.debug(
+                        f"Cleaned up LiveRequestQueue for session {session_id}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Error cleaning up queue for session {session_id}: {e}"
+                    )
 
     async def _get_or_create_runner(self, user_id: str) -> InMemoryRunner:
         """Get an existing runner from pool or create a new one for better performance"""
@@ -185,13 +311,28 @@ You have access to the conversation history through the session state. Use this 
 
     async def cleanup(self) -> None:
         """Clean up all resources for graceful shutdown"""
+        logger.info("Cleaning up ADK service resources")
+
+        # Clean up queue pool
+        async with self._queue_pool_lock:
+            for session_id, queue in list(self._queue_pool.items()):
+                try:
+                    queue.close()
+                    logger.debug(f"Cleaned up queue for session {session_id}")
+                except Exception as e:
+                    logger.warning(
+                        f"Error cleaning up queue for session {session_id}: {e}"
+                    )
+            self._queue_pool.clear()
+            self._queue_health.clear()  # Clear health tracking
+
+        # Clean up runner pool
         async with self._pool_lock:
-            logger.info("Cleaning up ADK service resources")
-            # Clear the runner pool
             self._runner_pool.clear()
             # Clear sessions (WeakValueDictionary will auto-cleanup)
             self._sessions.clear()
-            logger.info("ADK service cleanup completed")
+
+        logger.info("ADK service cleanup completed")
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         """
@@ -233,15 +374,11 @@ You have access to the conversation history through the session state. Use this 
             )
             logger.info(f"Created session {session_id}")
 
-            # Set up run configuration for text responses
-            # Note: ADK expects string values for response_modalities
-            # The Pydantic warning is expected and can be safely ignored
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
-                run_config = RunConfig(response_modalities=["TEXT"])
+            # Get reusable run configuration for better performance
+            run_config = self._get_run_config()
 
-            # Create LiveRequestQueue for this session
-            live_request_queue = LiveRequestQueue()
+            # Get LiveRequestQueue from pool for better performance
+            live_request_queue = await self._get_or_create_queue(session_id)
 
             # Start the live agent session using proper streaming pattern
             live_events = runner.run_live(
@@ -251,47 +388,74 @@ You have access to the conversation history through the session state. Use this 
             )
             logger.debug("Started live agent session")
 
-            # Send user message to the agent
-            user_content = Content(
-                role="user", parts=[Part.from_text(text=request.message)]
-            )
+            # Send user message to the agent using efficient content creation
+            user_content = self._create_user_content(request.message)
             live_request_queue.send_content(content=user_content)
             logger.debug("Sent user message to agent")
 
             # Collect response from agent events
             response_text = ""
+            event_count = 0
 
-            # Process events from the agent
-            async for event in live_events:
-                logger.debug(f"Received event: {type(event).__name__}")
+            # Process events from the agent with timeout protection
+            logger.debug(
+                f"Starting streaming with {self._streaming_timeout}s timeout, max {self._max_events} events"
+            )
+            try:
+                async with asyncio.timeout(self._streaming_timeout):
+                    async for event in live_events:
+                        event_count += 1
+                        logger.debug(
+                            f"Received event {event_count}: {type(event).__name__}"
+                        )
 
-                # Check if turn is complete
-                if hasattr(event, "turn_complete") and event.turn_complete:
-                    logger.debug("Turn completed")
-                    break
-
-                # Extract text content from the event
-                # Only process non-partial events (final complete response) to avoid duplication
-                if hasattr(event, "content") and event.content:
-                    if hasattr(event.content, "parts") and event.content.parts:
-                        # Check if this is a partial event (streaming) or final complete event
-                        is_partial = hasattr(event, "partial") and event.partial
-                        if not is_partial:  # Only use final complete response
-                            for part in event.content.parts:
-                                if hasattr(part, "text") and part.text:
-                                    response_text += part.text  # Concatenate all parts
-                                    logger.debug(
-                                        f"Added response text part: {len(part.text)} chars, total: {len(response_text)} chars"
-                                    )
-                        else:
-                            logger.debug(
-                                f"Skipping partial streaming event: "
-                                f"{len(event.content.parts)} parts"
+                        # Safety check: prevent infinite event loops
+                        if event_count > self._max_events:
+                            logger.warning(
+                                f"Maximum events ({self._max_events}) exceeded, stopping"
                             )
+                            break
 
-            # Close the live request queue
-            live_request_queue.close()
-            logger.debug("Closed live request queue")
+                        # Check if turn is complete
+                        if hasattr(event, "turn_complete") and event.turn_complete:
+                            logger.debug("Turn completed")
+                            break
+
+                        # Extract text content from the event
+                        # Only process non-partial events (final complete response) to avoid duplication
+                        if hasattr(event, "content") and event.content:
+                            if hasattr(event.content, "parts") and event.content.parts:
+                                # Check if this is a partial event (streaming) or final complete event
+                                is_partial = hasattr(event, "partial") and event.partial
+                                if not is_partial:  # Only use final complete response
+                                    for part in event.content.parts:
+                                        if hasattr(part, "text") and part.text:
+                                            response_text += (
+                                                part.text
+                                            )  # Concatenate all parts
+                                            logger.debug(
+                                                f"Added response text part: {len(part.text)} chars, total: {len(response_text)} chars"
+                                            )
+                                else:
+                                    logger.debug(
+                                        f"Skipping partial streaming event: "
+                                        f"{len(event.content.parts)} parts"
+                                    )
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"Streaming timeout after {self._streaming_timeout} seconds"
+                )
+                await self._cleanup_queue(session_id)
+                return ChatResponse(
+                    message="Request timed out. Please try again with a shorter message.",
+                    success=False,
+                    session_id=session_id,
+                    error="Streaming timeout",
+                )
+
+            # Clean up the live request queue using proper pool management
+            await self._cleanup_queue(session_id)
+            logger.debug("Cleaned up live request queue")
 
             if response_text:
                 logger.info(

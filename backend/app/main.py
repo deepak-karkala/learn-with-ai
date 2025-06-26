@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.services.config import settings, setup_logging
 from app.services.adk_service import ADKService, ChatRequest, ChatResponse
+from app.services.config import settings, setup_logging
 
 # Load environment variables
 load_dotenv()

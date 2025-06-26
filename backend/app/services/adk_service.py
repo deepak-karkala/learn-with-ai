@@ -2,13 +2,15 @@
 ADK Service for managing agents and sessions using Google ADK.
 """
 
-import os
 import logging
-from typing import Dict, Any, Optional
+import os
+from typing import Any, Dict, Optional
+
 from google.adk.agents import Agent, LiveRequestQueue
-from google.adk.runners import InMemoryRunner
+
 # from google.adk.sessions import InMemorySessionService  # Not directly used
 from google.adk.agents.run_config import RunConfig
+from google.adk.runners import InMemoryRunner
 from google.genai.types import Content, Part
 from pydantic import BaseModel
 
@@ -216,8 +218,12 @@ You have access to the conversation history through the session state. Use this 
                         if not is_partial:  # Only use final complete response
                             for part in event.content.parts:
                                 if hasattr(part, "text") and part.text:
-                                    response_text = part.text  # Use assignment, not concatenation
-                                    logger.debug(f"Set final response text: {len(part.text)} chars")
+                                    response_text = (
+                                        part.text
+                                    )  # Use assignment, not concatenation
+                                    logger.debug(
+                                        f"Set final response text: {len(part.text)} chars"
+                                    )
                         else:
                             logger.debug(
                                 f"Skipping partial streaming event: "
@@ -265,20 +271,24 @@ You have access to the conversation history through the session state. Use this 
             return {
                 "configured": agent_configured,
                 "agent_name": getattr(self.agent, "name", None) if self.agent else None,
-                "model_info": {"type": "Gemini", "model": "gemini-2.0-flash-exp"}
-                if self.agent
-                else None,
+                "model_info": (
+                    {"type": "Gemini", "model": "gemini-2.0-flash-exp"}
+                    if self.agent
+                    else None
+                ),
                 "architecture": "streaming",
                 "session_management": "per-chat (InMemoryRunner + InMemorySessionService)",
                 "app_name": self.app_name,
                 "status": "ready" if agent_configured else "not_configured",
-                "capabilities": [
-                    "text_streaming",
-                    "live_request_queue",
-                    "bidirectional_communication",
-                ]
-                if agent_configured
-                else [],
+                "capabilities": (
+                    [
+                        "text_streaming",
+                        "live_request_queue",
+                        "bidirectional_communication",
+                    ]
+                    if agent_configured
+                    else []
+                ),
             }
         except Exception as e:
             logger.error(f"ADK health check failed: {str(e)}")

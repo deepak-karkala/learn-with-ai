@@ -2,9 +2,9 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main ]  # Only run CI on direct pushes to main
+    branches: [ main ]  # Run CI on direct pushes to main
   pull_request:
-    branches: [ main ]  # Run CI on PRs to main (this is where we need validation)
+    branches: [ main, develop ]  # Run CI on PRs to main AND develop
 
 jobs:
   test-frontend:

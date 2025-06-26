@@ -1,15 +1,15 @@
 name: Staging Deployment
 
 on:
-  push:
-    branches: [ develop ]  # Deploy to staging when develop is updated
   pull_request:
-    branches: [ develop ]  # Also deploy preview for PRs to develop
+    branches: [ develop ]  # Deploy preview for PRs to develop only
 
 jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     name: Deploy to Staging
+    needs: []  # Will add dependency on Claude Code Review
+    if: github.event.pull_request.draft == false  # Only deploy non-draft PRs
     
     steps:
     - name: Checkout code

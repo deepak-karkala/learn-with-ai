@@ -1,10 +1,8 @@
 name: Production CI
 
 on:
-  push:
-    branches: [ main ]  # Run when code is pushed to main
   pull_request:
-    branches: [ main ]  # Run on PRs to main (from develop)
+    branches: [ main ]  # Run only on PRs to main (from develop), not on push
 
 jobs:
   test-frontend:

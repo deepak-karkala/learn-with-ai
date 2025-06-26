@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "feature/**" ]  # Run CI when pushing to feature branches
   pull_request:
-    branches: [ main, develop ]  # Run CI on PRs to main AND develop
+    branches: [ develop ]  # Run CI on PRs to develop (for merge validation)
 
 jobs:
   test-frontend:

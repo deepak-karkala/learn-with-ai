@@ -90,14 +90,7 @@ jobs:
             console.log('Could not read review file:', e.message);
           }
           
-          const comment = `## 🤖 Claude Code Review Results
-
-\`\`\`
-${review.trim()}
-\`\`\`
-
----
-*✅ Tests passed and code reviewed. Ready for staging deployment.*`;
+          const comment = "## 🤖 Claude Code Review Results\n\n```\n" + review.trim() + "\n```\n\n---\n*✅ Tests passed and code reviewed. Ready for staging deployment.*";
           
           await github.rest.issues.createComment({
             issue_number: context.issue.number,

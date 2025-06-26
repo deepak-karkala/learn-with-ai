@@ -65,7 +65,20 @@ jobs:
     - name: Run Claude Code Review - General
       id: claude-general
       run: |
-        ./review-claude.sh full > claude-review-general.txt 2>&1 || true
+        if command -v claude > /dev/null 2>&1; then
+          echo "🤖 Running Claude Code Review..."
+          ./review-claude.sh full > claude-review-general.txt 2>&1 || echo "Claude review failed but continuing..."
+        else
+          echo "⚠️ Claude CLI not available. Providing manual review guidance instead." > claude-review-general.txt
+          echo "" >> claude-review-general.txt
+          echo "## Manual Review Checklist" >> claude-review-general.txt
+          echo "Since automated Claude Code Review is not available, please manually verify:" >> claude-review-general.txt
+          echo "- Code follows project conventions and best practices" >> claude-review-general.txt
+          echo "- No security vulnerabilities (SQL injection, XSS, etc.)" >> claude-review-general.txt
+          echo "- Proper error handling and logging" >> claude-review-general.txt
+          echo "- ADK implementation follows streaming patterns correctly" >> claude-review-general.txt
+          echo "- All tests pass and coverage is maintained" >> claude-review-general.txt
+        fi
         echo "GENERAL_REVIEW<<EOF" >> $GITHUB_OUTPUT
         cat claude-review-general.txt >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
@@ -75,7 +88,17 @@ jobs:
     - name: Run Claude Code Review - Security
       id: claude-security  
       run: |
-        ./review-claude.sh security > claude-review-security.txt 2>&1 || true
+        if command -v claude > /dev/null 2>&1; then
+          ./review-claude.sh security > claude-review-security.txt 2>&1 || echo "Claude security review failed"
+        else
+          echo "⚠️ Claude CLI not available. Manual security review required." > claude-review-security.txt
+          echo "Please manually verify:" >> claude-review-security.txt
+          echo "- No hardcoded secrets or API keys" >> claude-review-security.txt
+          echo "- Input validation on all endpoints" >> claude-review-security.txt
+          echo "- Proper authentication and authorization" >> claude-review-security.txt
+          echo "- SQL injection prevention" >> claude-review-security.txt
+          echo "- XSS protection in frontend" >> claude-review-security.txt
+        fi
         echo "SECURITY_REVIEW<<EOF" >> $GITHUB_OUTPUT
         cat claude-review-security.txt >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
@@ -85,7 +108,17 @@ jobs:
     - name: Run Claude Code Review - ADK Specific
       id: claude-adk
       run: |
-        ./review-claude.sh adk > claude-review-adk.txt 2>&1 || true
+        if command -v claude > /dev/null 2>&1; then
+          ./review-claude.sh adk > claude-review-adk.txt 2>&1 || echo "Claude ADK review failed"
+        else
+          echo "⚠️ Claude CLI not available. Manual ADK review required." > claude-review-adk.txt
+          echo "Please manually verify:" >> claude-review-adk.txt
+          echo "- ADK Agent initialization follows streaming patterns" >> claude-review-adk.txt
+          echo "- Proper use of InMemoryRunner and LiveRequestQueue" >> claude-review-adk.txt
+          echo "- Session management handles errors gracefully" >> claude-review-adk.txt
+          echo "- Streaming response logic avoids duplication" >> claude-review-adk.txt
+          echo "- Environment variables are properly configured" >> claude-review-adk.txt
+        fi
         echo "ADK_REVIEW<<EOF" >> $GITHUB_OUTPUT
         cat claude-review-adk.txt >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT

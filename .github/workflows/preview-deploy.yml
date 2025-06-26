@@ -19,9 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Deploy to Vercel Preview
     permissions:
-      contents: read
+      contents: write
       issues: write
-      pull-requests: write
+      deployments: write
+      statuses: write
     
     steps:
     - name: Checkout code
@@ -95,7 +96,7 @@ jobs:
         VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
         VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
         
-    - name: Create deployment comment
+    - name: Create GitHub deployment
       uses: actions/github-script@v7
       with:
         script: |
@@ -103,40 +104,91 @@ jobs:
           const commit = context.sha.substring(0, 7);
           const branch = context.ref.replace('refs/heads/', '');
           
-          const comment = `## 🚀 Preview Deployment
-          
-          **Branch:** \`${branch}\`
-          **Commit:** \`${commit}\`
-          **Preview URL:** ${previewUrl || 'Deployment in progress...'}
-          
-          ### Features Available:
-          - ✅ FastAPI backend with ADK integration
-          - ✅ Health check endpoints
-          - ✅ Chat functionality with Gemini 2.0 Flash
-          - ✅ Real-time streaming responses
-          - ✅ Connection pooling optimizations
-          
-          ### Testing:
-          \`\`\`bash
-          # Test health endpoint
-          curl ${previewUrl || 'PREVIEW_URL'}/api/health
-          
-          # Test chat endpoint
-          curl -X POST ${previewUrl || 'PREVIEW_URL'}/api/chat \\
-            -H "Content-Type: application/json" \\
-            -d '{"message": "Hello", "user_id": "test"}'
-          \`\`\`
-          
-          ---
-          *⚡ Automated deployment from develop branch*`;
-          
-          // Create a commit comment instead of issue comment for push events
-          await github.rest.repos.createCommitComment({
+          // Create deployment
+          const deployment = await github.rest.repos.createDeployment({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            commit_sha: context.sha,
-            body: comment
+            ref: context.sha,
+            environment: 'preview',
+            description: `Preview deployment for ${branch}`,
+            auto_merge: false,
+            required_contexts: []
           });
+          
+          // Create deployment status
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: deployment.data.id,
+            state: previewUrl ? 'success' : 'failure',
+            environment_url: previewUrl,
+            description: previewUrl ? `Preview deployed to ${previewUrl}` : 'Deployment failed',
+            log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+          });
+          
+          console.log(`🚀 Preview deployment: ${previewUrl || 'Failed'}`);
+          console.log(`📝 Deployment created for commit ${commit} on ${branch}`);
+          
+          // Close previous deployment issues to keep things clean
+          try {
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'deployment,preview,automated',
+              state: 'open'
+            });
+            
+            for (const issue of issues.data) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+            }
+          } catch (error) {
+            console.log('Could not close previous deployment issues:', error.message);
+          }
+          
+          // Create new deployment issue (optional)
+          if (previewUrl) {
+            try {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🚀 Preview Deployment - ${new Date().toLocaleDateString()}`,
+                body: `## Preview Deployment Successful
+                
+                **Branch:** \`${branch}\`
+                **Commit:** \`${commit}\`
+                **Preview URL:** ${previewUrl}
+                **Build:** [View logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+                
+                ### 🧪 Test the deployment:
+                \`\`\`bash
+                # Health check
+                curl ${previewUrl}/api/health
+                
+                # Chat API test
+                curl -X POST ${previewUrl}/api/chat \\
+                  -H "Content-Type: application/json" \\
+                  -d '{"message": "Hello", "user_id": "test"}'
+                \`\`\`
+                
+                ### ✅ Features deployed:
+                - FastAPI backend with ADK integration
+                - Health check endpoints  
+                - Chat functionality with Gemini 2.0 Flash
+                - Real-time streaming responses
+                - Connection pooling optimizations
+                
+                *This issue will be automatically closed when a new deployment is created.*`,
+                labels: ['deployment', 'preview', 'automated']
+              });
+            } catch (error) {
+              console.log('Could not create deployment issue:', error.message);
+            }
+          }
           
     - name: Run post-deployment health check
       run: |

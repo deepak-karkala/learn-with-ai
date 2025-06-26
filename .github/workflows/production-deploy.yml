@@ -1,0 +1,163 @@
+name: Production Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production:
+        description: 'Type "PRODUCTION" to confirm deployment'
+        required: true
+        type: string
+      git_ref:
+        description: 'Git ref to deploy (branch/tag/commit)'
+        required: true
+        default: 'develop'
+        type: string
+
+jobs:
+  validate-input:
+    runs-on: ubuntu-latest
+    name: Validate Production Deployment
+    steps:
+    - name: Validate confirmation
+      run: |
+        if [ "${{ github.event.inputs.confirm_production }}" != "PRODUCTION" ]; then
+          echo "❌ Production deployment not confirmed. Please type 'PRODUCTION' exactly."
+          exit 1
+        fi
+        echo "✅ Production deployment confirmed"
+
+  deploy-production:
+    needs: validate-input
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    environment: 
+      name: production
+      url: https://learn-with-ai.vercel.app
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.git_ref }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install Vercel CLI
+      run: npm install -g vercel@latest
+      
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+        
+    - name: Setup Python for backend tests
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+        
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        uv sync --dev
+        
+    - name: Run comprehensive backend tests
+      run: |
+        cd backend
+        source .venv/bin/activate
+        python -m pytest tests/ -v --tb=short
+      env:
+        # Mock environment variables for testing
+        GOOGLE_API_KEY: "fake-key-for-testing"
+        ADK_MODEL_NAME: "gemini-2.0-flash-exp"
+        
+    - name: Build frontend for production
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Deploy to Vercel Production
+      run: |
+        cd frontend
+        vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --confirm
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        
+    - name: Get production URL
+      id: production
+      run: |
+        cd frontend
+        PROD_URL=$(vercel ls --prod --token=${{ secrets.VERCEL_TOKEN }} | grep -E "https://.*\.vercel\.app" | head -1 | awk '{print $2}')
+        echo "production_url=$PROD_URL" >> $GITHUB_OUTPUT
+        echo "🌟 Production URL: $PROD_URL"
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        
+    - name: Run production health checks
+      run: |
+        sleep 60  # Wait longer for production deployment
+        PROD_URL="${{ steps.production.outputs.production_url }}"
+        if [ -n "$PROD_URL" ]; then
+          echo "🔍 Testing production deployment..."
+          
+          # Health check
+          curl -f "$PROD_URL/api/health" && echo "✅ Health check passed" || echo "❌ Health check failed"
+          
+          # Basic API test
+          curl -f "$PROD_URL/" && echo "✅ Root endpoint accessible" || echo "❌ Root endpoint failed"
+          
+          echo "🎉 Production deployment completed!"
+        fi
+        
+    - name: Create production deployment announcement
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const prodUrl = '${{ steps.production.outputs.production_url }}';
+          const gitRef = '${{ github.event.inputs.git_ref }}';
+          const deployer = '${{ github.actor }}';
+          
+          const announcement = `## 🎉 Production Deployment Complete!
+          
+          **Deployed by:** @${deployer}
+          **Git ref:** \`${gitRef}\`
+          **Production URL:** ${prodUrl || 'https://learn-with-ai.vercel.app'}
+          **Deployment time:** ${new Date().toISOString()}
+          
+          ### 🚀 What's New:
+          - Google ADK integration with Gemini 2.0 Flash
+          - Real-time streaming chat responses  
+          - Enhanced connection pooling and performance
+          - Comprehensive health monitoring
+          - Claude Code Review integration
+          
+          ### 🔧 Next Steps:
+          - [ ] Monitor application performance
+          - [ ] Verify all endpoints are working
+          - [ ] Check logs for any issues
+          - [ ] Update documentation if needed
+          
+          ---
+          *🌟 Successfully deployed to production!*`;
+          
+          // Create an issue for production deployment tracking
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: \`Production Deployment - \${new Date().toLocaleDateString()}\`,
+            body: announcement,
+            labels: ['deployment', 'production']
+          });

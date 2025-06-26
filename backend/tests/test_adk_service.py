@@ -120,7 +120,7 @@ class TestADKService:
             patch("app.services.adk_service.Agent") as mock_agent,
             patch("app.services.adk_service.InMemoryRunner") as mock_runner_class,
             patch("app.services.adk_service.LiveRequestQueue") as mock_queue_class,
-            patch("app.services.adk_service.RunConfig") as mock_run_config,
+            patch("app.services.adk_service.RunConfig"),
         ):
 
             # Setup agent mock

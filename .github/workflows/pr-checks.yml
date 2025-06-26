@@ -53,7 +53,7 @@ jobs:
     - name: Install backend dependencies
       run: |
         cd backend
-        uv sync
+        uv sync --dev
 
     - name: Run backend tests
       run: |

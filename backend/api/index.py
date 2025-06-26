@@ -13,7 +13,7 @@ app_dir = current_dir.parent / "app"
 sys.path.insert(0, str(app_dir))
 
 # Import the FastAPI app
-from main import app
+from main import app  # noqa: E402
 
 # Export the app for Vercel
 # Vercel will automatically handle ASGI applications

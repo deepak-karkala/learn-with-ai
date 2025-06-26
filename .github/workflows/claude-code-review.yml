@@ -20,27 +20,17 @@ jobs:
       with:
         fetch-depth: 0  # Need full history for git diff
 
-    - name: Install Claude CLI
-      run: |
-        # Install Claude CLI - try multiple installation methods
-        if curl -fsSL https://claude.ai/install.sh | sh; then
-          echo "$HOME/.claude/bin" >> $GITHUB_PATH
-        elif curl -fsSL https://github.com/anthropics/claude-cli/releases/latest/download/install.sh | sh; then
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-        else
-          echo "Warning: Claude CLI installation failed. Using mock review mode."
-          echo '#!/bin/bash' > /tmp/claude
-          echo 'echo "Claude CLI not available in CI - skipping review"' >> /tmp/claude
-          chmod +x /tmp/claude
-          echo "/tmp" >> $GITHUB_PATH
-        fi
-
-    - name: Setup Node.js (for frontend review)
+    - name: Setup Node.js and Install Claude CLI
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install Claude Code CLI
+      run: |
+        npm install -g @anthropic-ai/claude-code
+        claude --version || echo "Claude CLI installation verification failed"
 
     - name: Install frontend dependencies
       run: |

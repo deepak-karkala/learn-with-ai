@@ -18,6 +18,10 @@ jobs:
   deploy-preview:
     runs-on: ubuntu-latest
     name: Deploy to Vercel Preview
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     
     steps:
     - name: Checkout code
@@ -69,21 +73,23 @@ jobs:
         npm run build
         
     - name: Deploy to Vercel Preview
+      id: deploy
       run: |
         cd frontend
-        vercel --token=${{ secrets.VERCEL_TOKEN }} --yes
-      env:
-        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        # Deploy and capture the output with preview URL
+        DEPLOY_OUTPUT=$(vercel --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$DEPLOY_OUTPUT"
         
-    - name: Get Preview URL
-      id: vercel
-      run: |
-        cd frontend
-        PREVIEW_URL=$(vercel ls --token=${{ secrets.VERCEL_TOKEN }} | grep -E "https://.*\.vercel\.app" | head -1 | awk '{print $2}')
-        echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
-        echo "🚀 Preview URL: $PREVIEW_URL"
+        # Extract preview URL from the output
+        PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        
+        if [ -n "$PREVIEW_URL" ]; then
+          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "🚀 Preview URL found: $PREVIEW_URL"
+        else
+          echo "⚠️ Could not extract preview URL from deployment output"
+          echo "preview_url=" >> $GITHUB_OUTPUT
+        fi
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
@@ -93,7 +99,7 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
-          const previewUrl = '${{ steps.vercel.outputs.preview_url }}';
+          const previewUrl = '${{ steps.deploy.outputs.preview_url }}';
           const commit = context.sha.substring(0, 7);
           const branch = context.ref.replace('refs/heads/', '');
           
@@ -135,7 +141,7 @@ jobs:
     - name: Run post-deployment health check
       run: |
         sleep 30  # Wait for deployment to be ready
-        PREVIEW_URL="${{ steps.vercel.outputs.preview_url }}"
+        PREVIEW_URL="${{ steps.deploy.outputs.preview_url }}"
         if [ -n "$PREVIEW_URL" ]; then
           echo "Testing deployment health..."
           curl -f "$PREVIEW_URL/api/health" || echo "⚠️ Health check failed"

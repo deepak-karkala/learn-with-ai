@@ -2,7 +2,9 @@ name: Staging Deployment
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ develop ]  # Deploy to staging when develop is updated
+  pull_request:
+    branches: [ develop ]  # Also deploy preview for PRs to develop
 
 jobs:
   deploy-staging:

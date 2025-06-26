@@ -1,4 +1,4 @@
-# learn-with-ai
+# Learn With AI
 
 AI-powered learning platform for system design interviews with interactive AI tutoring, real-time whiteboard feedback, and comprehensive progress tracking.
 

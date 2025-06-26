@@ -47,10 +47,14 @@ class ADKService:
         self.runner: Optional[InMemoryRunner] = None
         self.agent: Optional[Agent] = None
         self.app_name: str = "systemdesign-ai-platform"
+        self._env_configured: bool = False  # Track if environment is already configured
         self._initialize_adk()
 
     def _configure_environment(self) -> None:
-        """Configure environment variables for ADK"""
+        """Configure environment variables for ADK (only once)"""
+        if self._env_configured:
+            return  # Skip if already configured
+            
         # ADK expects these environment variables to be set
         if settings.google_api_key:
             os.environ["GOOGLE_API_KEY"] = settings.google_api_key
@@ -75,6 +79,10 @@ class ADKService:
             logger.debug(f"Set SSL_CERT_FILE to {certifi.where()}")
         except ImportError:
             logger.warning("certifi not installed, SSL verification may fail")
+        
+        # Mark environment as configured to avoid redundant setup
+        self._env_configured = True
+        logger.debug("ADK environment configuration completed")
 
     def _initialize_adk(self) -> None:
         """Initialize ADK components"""
@@ -87,7 +95,7 @@ class ADKService:
             # Create the system design agent using Agent (following streaming pattern)
             self.agent = Agent(
                 name="system_design_agent",
-                model="gemini-2.0-flash-exp",  # Use streaming compatible model
+                model=settings.adk_model_name,  # Configurable model name
                 description="Expert system design interviewer and tutor",
                 instruction="""
 You are an expert system design interviewer and tutor. Your role is to:
@@ -252,9 +260,26 @@ You have access to the conversation history through the session state. Use this 
                     error="Empty response from agent",
                 )
 
+        except ImportError as e:
+            logger.error(f"ADK import error for session {session_id}: {str(e)}")
+            return ChatResponse(
+                message="ADK service is not properly configured. Please check installation.",
+                success=False,
+                session_id=session_id,
+                error="ADK configuration error",
+            )
+        except ValueError as e:
+            logger.error(f"ADK configuration error for session {session_id}: {str(e)}")
+            return ChatResponse(
+                message="Configuration error. Please check ADK settings.",
+                success=False,
+                session_id=session_id,
+                error="Configuration error",
+            )
         except Exception as e:
             logger.error(
-                f"Error in ADK chat for session {session_id}: {str(e)}", exc_info=True
+                f"Unexpected error in ADK chat for session {session_id}: {str(e)}", 
+                exc_info=True
             )
             return ChatResponse(
                 message="I'm experiencing technical difficulties. Please try again in a moment.",

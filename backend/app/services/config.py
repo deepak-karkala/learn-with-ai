@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     google_api_key: Optional[str] = None
     google_cloud_project: Optional[str] = None
     google_cloud_location: str = "us-central1"
+    
+    # ADK Agent Configuration
+    adk_model_name: str = "gemini-2.0-flash-exp"
 
     # Application Configuration
     debug: bool = False
@@ -27,6 +30,20 @@ class Settings(BaseSettings):
     api_version: str = "0.1.0"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    
+    def validate_required_settings(self) -> None:
+        """Validate that required settings are present for ADK functionality"""
+        if not self.google_api_key and not self.google_genai_use_vertexai:
+            raise ValueError(
+                "Either GOOGLE_API_KEY must be set for AI Studio, or "
+                "GOOGLE_GENAI_USE_VERTEXAI=True with GOOGLE_CLOUD_PROJECT for Vertex AI"
+            )
+        
+        if self.google_genai_use_vertexai and not self.google_cloud_project:
+            raise ValueError(
+                "GOOGLE_CLOUD_PROJECT is required when using Vertex AI "
+                "(GOOGLE_GENAI_USE_VERTEXAI=True)"
+            )
 
 
 def get_settings() -> Settings:

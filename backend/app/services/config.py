@@ -53,8 +53,27 @@ def get_settings() -> Settings:
 
 def setup_logging(settings: Settings) -> None:
     """Configure logging based on settings"""
+    # Validate log level to prevent log injection and AttributeError
+    valid_log_levels = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
+    }
+
+    log_level_upper = settings.log_level.upper().strip()
+    if log_level_upper not in valid_log_levels:
+        # Default to INFO if invalid level provided
+        log_level = logging.INFO
+        # Use stderr for early warnings before logging is configured
+        import sys
+        print(f"Warning: Invalid log level '{settings.log_level}', defaulting to INFO", file=sys.stderr)
+    else:
+        log_level = valid_log_levels[log_level_upper]
+
     logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper()),
+        level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.StreamHandler(),

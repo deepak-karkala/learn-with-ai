@@ -1,4 +1,6 @@
 import uvicorn
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,17 +14,41 @@ load_dotenv()
 # Setup logging
 setup_logging(settings)
 
-# Create FastAPI app
+# ADK service will be initialized properly with dependency injection
+adk_service: Optional[ADKService] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Handle application startup and shutdown for proper resource management"""
+    global adk_service
+
+    # Startup
+    try:
+        adk_service = ADKService()
+        yield
+    except Exception as e:
+        # Log startup error but don't crash the app
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to initialize ADK service: {e}")
+        adk_service = None
+        yield
+    finally:
+        # Shutdown - cleanup resources
+        if adk_service:
+            await adk_service.cleanup()
+
+
+# Create FastAPI app with proper lifecycle management
 app = FastAPI(
     title=settings.api_title,
     description="Backend API for AI-powered system design learning",
     version=settings.api_version,
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
-
-# Initialize the ADK service
-adk_service = ADKService()
 
 
 # Configure CORS
@@ -34,8 +60,8 @@ app.add_middleware(
         "https://your-app.vercel.app",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
 
@@ -58,7 +84,10 @@ async def health_check() -> dict:
 @app.get("/api/health")
 async def api_health_check() -> dict:
     """API health check endpoint"""
-    adk_status = adk_service.health_check()
+    if adk_service is None:
+        adk_status = {"status": "not_initialized"}
+    else:
+        adk_status = adk_service.health_check()
     return {
         "status": "healthy",
         "api_version": settings.api_version,
@@ -89,6 +118,13 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
     try:
         logger.info(f"Received ADK chat request from user {request.user_id}")
 
+        # Check if ADK service is available
+        if adk_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="ADK service is not available"
+            )
+
         # Get response from ADK service
         response = await adk_service.chat(request)
 
@@ -110,7 +146,7 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
             f"Unexpected error in ADK chat endpoint for user {request.user_id}: {str(e)}",
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/sessions/{user_id}/{session_id}")
@@ -126,6 +162,11 @@ async def get_session_info(user_id: str, session_id: str) -> dict:
         Session information
     """
     try:
+        if adk_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="ADK service is not available"
+            )
         session_info = adk_service.get_session_info(user_id, session_id)
         return session_info
     except Exception as e:

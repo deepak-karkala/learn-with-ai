@@ -2,9 +2,12 @@
 ADK Service for managing agents and sessions using Google ADK.
 """
 
+import asyncio
 import logging
 import os
-from typing import Any, Dict, Optional, Union
+import warnings
+from typing import Any, Dict, Optional
+from weakref import WeakValueDictionary
 
 from google.adk.agents import Agent, LiveRequestQueue
 from google.adk.agents.run_config import RunConfig
@@ -44,10 +47,16 @@ class ADKService:
     def __init__(self) -> None:
         """Initialize the ADK service"""
         self.session_service: Optional[Any] = None
-        self.runner: Optional[InMemoryRunner] = None
         self.agent: Optional[Agent] = None
         self.app_name: str = "systemdesign-ai-platform"
         self._env_configured: bool = False  # Track if environment is already configured
+
+        # Connection pooling for performance
+        self._runner_pool: Dict[str, InMemoryRunner] = {}
+        self._pool_lock = asyncio.Lock()
+        self._max_pool_size = 10
+        self._sessions: WeakValueDictionary = WeakValueDictionary()
+
         self._initialize_adk()
 
     def _configure_environment(self) -> None:
@@ -58,7 +67,7 @@ class ADKService:
         # ADK expects these environment variables to be set
         if settings.google_api_key:
             os.environ["GOOGLE_API_KEY"] = settings.google_api_key
-            logger.debug("Set GOOGLE_API_KEY environment variable")
+            logger.debug("Set GOOGLE_API_KEY environment variable (key masked for security)")
 
         if settings.google_genai_use_vertexai:
             os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
@@ -144,6 +153,46 @@ You have access to the conversation history through the session state. Use this 
             logger.error(f"Failed to initialize ADK service: {str(e)}", exc_info=True)
             raise
 
+    async def _get_or_create_runner(self, user_id: str) -> InMemoryRunner:
+        """Get an existing runner from pool or create a new one for better performance"""
+        if self.agent is None:
+            raise ValueError("ADK agent not initialized")
+
+        async with self._pool_lock:
+            # Try to reuse an existing runner for this user
+            if user_id in self._runner_pool:
+                logger.debug(f"Reusing existing runner for user {user_id}")
+                return self._runner_pool[user_id]
+
+            # Create new runner if pool not full
+            if len(self._runner_pool) < self._max_pool_size:
+                logger.debug(f"Creating new runner for user {user_id}")
+                runner = InMemoryRunner(agent=self.agent)
+                self._runner_pool[user_id] = runner
+                return runner
+
+            # Pool is full, create temporary runner (not pooled)
+            logger.debug(f"Pool full, creating temporary runner for user {user_id}")
+            return InMemoryRunner(agent=self.agent)
+
+    async def _cleanup_runner(self, user_id: str) -> None:
+        """Clean up runner resources (optional, for explicit cleanup)"""
+        async with self._pool_lock:
+            if user_id in self._runner_pool:
+                # In a production system, you might want to add runner cleanup logic here
+                logger.debug(f"Runner cleanup requested for user {user_id}")
+                pass  # ADK runners should clean themselves up
+
+    async def cleanup(self) -> None:
+        """Clean up all resources for graceful shutdown"""
+        async with self._pool_lock:
+            logger.info("Cleaning up ADK service resources")
+            # Clear the runner pool
+            self._runner_pool.clear()
+            # Clear sessions (WeakValueDictionary will auto-cleanup)
+            self._sessions.clear()
+            logger.info("ADK service cleanup completed")
+
     async def chat(self, request: ChatRequest) -> ChatResponse:
         """
         Process a chat message using ADK agent with proper streaming pattern.
@@ -171,9 +220,9 @@ You have access to the conversation history through the session state. Use this 
             )
             logger.info(f"Message length: {len(request.message)}")
 
-            # Create a new runner and session for this chat (following streaming pattern)
-            runner = InMemoryRunner(agent=self.agent)
-            logger.debug("Created InMemoryRunner")
+            # Get runner from pool for better performance
+            runner = await self._get_or_create_runner(request.user_id)
+            logger.debug("Obtained runner from pool")
 
             # Create session using the runner's session service
             session = await runner.session_service.create_session(
@@ -185,7 +234,11 @@ You have access to the conversation history through the session state. Use this 
             logger.info(f"Created session {session_id}")
 
             # Set up run configuration for text responses
-            run_config = RunConfig(response_modalities=["TEXT"])
+            # Note: ADK expects string values for response_modalities
+            # The Pydantic warning is expected and can be safely ignored
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+                run_config = RunConfig(response_modalities=["TEXT"])
 
             # Create LiveRequestQueue for this session
             live_request_queue = LiveRequestQueue()
@@ -226,11 +279,9 @@ You have access to the conversation history through the session state. Use this 
                         if not is_partial:  # Only use final complete response
                             for part in event.content.parts:
                                 if hasattr(part, "text") and part.text:
-                                    response_text = (
-                                        part.text
-                                    )  # Use assignment, not concatenation
+                                    response_text += part.text  # Concatenate all parts
                                     logger.debug(
-                                        f"Set final response text: {len(part.text)} chars"
+                                        f"Added response text part: {len(part.text)} chars, total: {len(response_text)} chars"
                                     )
                         else:
                             logger.debug(

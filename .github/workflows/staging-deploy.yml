@@ -1,0 +1,44 @@
+name: Staging Deployment
+
+on:
+  push:
+    branches: [ develop ]
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Deploy to Vercel Preview
+      id: vercel-deploy
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        vercel-org-id: ${{ secrets.ORG_ID }}
+        vercel-project-id: ${{ secrets.PROJECT_ID }}
+        working-directory: ./frontend
+        scope: ${{ secrets.ORG_ID }}
+        vercel-args: '--confirm'
+      
+    - name: Get Preview URL and Status
+      run: |
+        echo "🚀 Preview Deployment Successful!"
+        echo "🔗 Preview URL: ${{ steps.vercel-deploy.outputs.preview-url }}"
+        echo "📋 Staging Environment Ready for Testing"
+        echo "🎯 Environment: develop branch → preview deployment"
+      
+    - name: Staging deployment status
+      run: |
+        echo "✅ Staging deployment completed"
+        echo "🎭 Environment: Staging (develop branch)"
+        echo "🔗 Manual verification required before merging to main"
+        echo "📋 Checklist:"
+        echo "  - [ ] UI/UX verification"
+        echo "  - [ ] Feature functionality testing"
+        echo "  - [ ] Integration testing"
+        echo "  - [ ] Performance check"

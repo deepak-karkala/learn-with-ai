@@ -2,9 +2,9 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]  # Only run CI on direct pushes to main
   pull_request:
-    branches: [ main ]
+    branches: [ main ]  # Run CI on PRs to main (this is where we need validation)
 
 jobs:
   test-frontend:
@@ -78,19 +78,5 @@ jobs:
           source .venv/bin/activate
           mypy app/
 
-  deploy-staging:
-    if: github.ref == 'refs/heads/develop'
-    needs: [test-frontend, test-backend]
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.ORG_ID }}
-          vercel-project-id: ${{ secrets.PROJECT_ID }}
-          working-directory: ./frontend
+  # Staging deployment moved to separate workflow (staging-deploy.yml)
+  # This keeps CI focused on testing and validation only

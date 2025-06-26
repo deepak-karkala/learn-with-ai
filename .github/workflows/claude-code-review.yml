@@ -2,74 +2,128 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    branches: [ main, develop ]
+    types: [ opened, synchronize, reopened ]
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-    
     runs-on: ubuntu-latest
+    name: Claude Code Review
+    
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
-      id-token: write
+      pull-requests: write
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for git diff
 
-      - name: Run Claude Code Review
-        id: claude-review
-        uses: anthropics/claude-code-action@beta
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
-          # model: "claude-opus-4-20250514"
-          
-          # Direct prompt for automated review (no @claude mention needed)
-          direct_prompt: |
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
-            
-            Be constructive and helpful in your feedback.
-          
-          # Optional: Customize review based on file types
-          # direct_prompt: |
-          #   Review this PR focusing on:
-          #   - For TypeScript files: Type safety and proper interface usage
-          #   - For API endpoints: Security, input validation, and error handling
-          #   - For React components: Performance, accessibility, and best practices
-          #   - For tests: Coverage, edge cases, and test quality
-          
-          # Optional: Different prompts for different authors
-          # direct_prompt: |
-          #   ${{ github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR' && 
-          #   'Welcome! Please review this PR from a first-time contributor. Be encouraging and provide detailed explanations for any suggestions.' ||
-          #   'Please provide a thorough code review focusing on our coding standards and best practices.' }}
-          
-          # Optional: Add specific tools for running tests or linting
-          # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-          
-          # Optional: Skip review for certain conditions
-          # if: |
-          #   !contains(github.event.pull_request.title, '[skip-review]') &&
-          #   !contains(github.event.pull_request.title, '[WIP]')
+    - name: Install Claude CLI
+      run: |
+        curl -fsSL https://claude.ai/install.sh | sh
+        echo "$HOME/.claude/bin" >> $GITHUB_PATH
 
+    - name: Setup Node.js (for frontend review)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Setup Python (for backend review)
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install uv (Python package manager)
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        uv sync
+
+    - name: Run Claude Code Review - General
+      id: claude-general
+      run: |
+        ./review-claude.sh full > claude-review-general.txt 2>&1 || true
+        echo "GENERAL_REVIEW<<EOF" >> $GITHUB_OUTPUT
+        cat claude-review-general.txt >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    - name: Run Claude Code Review - Security
+      id: claude-security  
+      run: |
+        ./review-claude.sh security > claude-review-security.txt 2>&1 || true
+        echo "SECURITY_REVIEW<<EOF" >> $GITHUB_OUTPUT
+        cat claude-review-security.txt >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    - name: Run Claude Code Review - ADK Specific
+      id: claude-adk
+      run: |
+        ./review-claude.sh adk > claude-review-adk.txt 2>&1 || true
+        echo "ADK_REVIEW<<EOF" >> $GITHUB_OUTPUT
+        cat claude-review-adk.txt >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    - name: Comment PR with Claude Review
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const generalReview = `${{ steps.claude-general.outputs.GENERAL_REVIEW }}`;
+          const securityReview = `${{ steps.claude-security.outputs.SECURITY_REVIEW }}`;
+          const adkReview = `${{ steps.claude-adk.outputs.ADK_REVIEW }}`;
+          
+          let comment = `## 🤖 Claude Code Review
+          
+          This automated review was generated by Claude Code to help identify potential issues in your pull request.
+          
+          ### 📋 General Code Review
+          \`\`\`
+          ${generalReview}
+          \`\`\`
+          
+          ### 🔒 Security Review  
+          \`\`\`
+          ${securityReview}
+          \`\`\`
+          
+          ### 🚀 ADK-Specific Review
+          \`\`\`
+          ${adkReview}
+          \`\`\`
+          
+          ---
+          *This review is automated and may contain false positives. Please use your judgment and review the suggestions carefully.*
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+    - name: Upload review artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: claude-code-review-results
+        path: |
+          claude-review-*.txt
+        retention-days: 30

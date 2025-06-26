@@ -71,11 +71,11 @@ jobs:
     - name: Deploy to Vercel Preview
       run: |
         cd frontend
-        vercel --token=${{ secrets.VERCEL_TOKEN }} --confirm
+        vercel --token=${{ secrets.VERCEL_TOKEN }} --yes
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
         
     - name: Get Preview URL
       id: vercel
@@ -86,8 +86,8 @@ jobs:
         echo "🚀 Preview URL: $PREVIEW_URL"
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
         
     - name: Create deployment comment
       uses: actions/github-script@v7

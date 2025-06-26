@@ -88,11 +88,11 @@ jobs:
     - name: Deploy to Vercel Production
       run: |
         cd frontend
-        vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --confirm
+        vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
         
     - name: Get production URL
       id: production
@@ -103,8 +103,8 @@ jobs:
         echo "🌟 Production URL: $PROD_URL"
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
         
     - name: Run production health checks
       run: |

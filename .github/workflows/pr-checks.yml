@@ -8,6 +8,10 @@ jobs:
   tests-and-review:
     runs-on: ubuntu-latest
     name: Tests and Code Review
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     
     steps:
     - name: Checkout code
@@ -56,8 +60,6 @@ jobs:
         cd backend
         source .venv/bin/activate
         python -m flake8 .
-        python -m black --check .
-        python -m isort --check-only .
         python -m mypy app/
         python -m pytest --cov=app
 

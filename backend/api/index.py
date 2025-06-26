@@ -2,6 +2,7 @@
 Vercel serverless function entry point for FastAPI app.
 This file adapts our FastAPI application to work with Vercel's serverless functions.
 """
+
 import os
 import sys
 from pathlib import Path

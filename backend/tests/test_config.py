@@ -2,11 +2,13 @@
 Tests for the configuration service.
 """
 
-import os
-import pytest
-from unittest.mock import patch, Mock
-from app.services.config import Settings, get_settings, setup_logging
 import logging
+import os
+from unittest.mock import Mock, patch
+
+import pytest
+
+from app.services.config import Settings, get_settings, setup_logging
 
 
 class TestSettings:
@@ -20,7 +22,7 @@ class TestSettings:
             for var in env_vars_to_clear:
                 os.environ.pop(var, None)
             settings = Settings()
-        
+
         assert settings.google_cloud_location == "us-central1"
         # Skip debug test in dev environment where DEBUG env var might be set
         # assert settings.debug is False
@@ -35,12 +37,12 @@ class TestSettings:
             "GOOGLE_CLOUD_PROJECT": "test-project",
             "GOOGLE_CLOUD_LOCATION": "us-west1",
             "DEBUG": "true",
-            "LOG_LEVEL": "DEBUG"
+            "LOG_LEVEL": "DEBUG",
         }
-        
+
         with patch.dict(os.environ, env_vars):
             settings = Settings()
-            
+
             assert settings.google_api_key == "test-api-key"
             assert settings.google_cloud_project == "test-project"
             assert settings.google_cloud_location == "us-west1"
@@ -55,20 +57,20 @@ class TestSettings:
     def test_setup_logging_function(self):
         """Test setup_logging function configures logging correctly"""
         settings = Settings(log_level="DEBUG")
-        
-        with patch('logging.basicConfig') as mock_basic_config:
+
+        with patch("logging.basicConfig") as mock_basic_config:
             setup_logging(settings)
-            
+
             # Verify basicConfig was called
             mock_basic_config.assert_called_once()
             call_args = mock_basic_config.call_args
-            
+
             # Check that level was set correctly
-            assert call_args[1]['level'] == logging.DEBUG
-            
+            assert call_args[1]["level"] == logging.DEBUG
+
             # Check format string is present
-            assert 'format' in call_args[1]
-            assert 'handlers' in call_args[1]
+            assert "format" in call_args[1]
+            assert "handlers" in call_args[1]
 
     def test_setup_logging_different_levels(self):
         """Test setup_logging with different log levels"""
@@ -78,28 +80,28 @@ class TestSettings:
             ("WARNING", logging.WARNING),
             ("ERROR", logging.ERROR),
         ]
-        
+
         for level_str, level_int in test_cases:
             settings = Settings(log_level=level_str)
-            
-            with patch('logging.basicConfig') as mock_basic_config:
+
+            with patch("logging.basicConfig") as mock_basic_config:
                 setup_logging(settings)
-                
+
                 call_args = mock_basic_config.call_args
-                assert call_args[1]['level'] == level_int
+                assert call_args[1]["level"] == level_int
 
     def test_optional_fields_none(self):
         """Test that optional fields can be None"""
         # Clear environment variables to test defaults
         env_vars_to_clear = ["GOOGLE_API_KEY", "GOOGLE_CLOUD_PROJECT", "DEBUG"]
-        
+
         with patch.dict(os.environ, {}, clear=False):
             # Remove specific env vars for this test
             for var in env_vars_to_clear:
                 os.environ.pop(var, None)
-            
+
             settings = Settings()
-            
+
             # These should be None by default if not set (skip in dev environment)
             # assert settings.google_api_key is None
             assert settings.google_cloud_project is None
@@ -115,6 +117,6 @@ class TestSettings:
         """Test that env_file configuration is set correctly"""
         settings = Settings()
         config = settings.model_config
-        
+
         assert config.get("env_file") == ".env"
         assert config.get("env_file_encoding") == "utf-8"

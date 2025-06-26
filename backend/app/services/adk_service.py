@@ -54,7 +54,7 @@ class ADKService:
         """Configure environment variables for ADK (only once)"""
         if self._env_configured:
             return  # Skip if already configured
-            
+
         # ADK expects these environment variables to be set
         if settings.google_api_key:
             os.environ["GOOGLE_API_KEY"] = settings.google_api_key
@@ -79,7 +79,7 @@ class ADKService:
             logger.debug(f"Set SSL_CERT_FILE to {certifi.where()}")
         except ImportError:
             logger.warning("certifi not installed, SSL verification may fail")
-        
+
         # Mark environment as configured to avoid redundant setup
         self._env_configured = True
         logger.debug("ADK environment configuration completed")
@@ -278,8 +278,8 @@ You have access to the conversation history through the session state. Use this 
             )
         except Exception as e:
             logger.error(
-                f"Unexpected error in ADK chat for session {session_id}: {str(e)}", 
-                exc_info=True
+                f"Unexpected error in ADK chat for session {session_id}: {str(e)}",
+                exc_info=True,
             )
             return ChatResponse(
                 message="I'm experiencing technical difficulties. Please try again in a moment.",

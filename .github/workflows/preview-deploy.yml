@@ -73,23 +73,45 @@ jobs:
         cd frontend
         npm run build
         
-    - name: Deploy to Vercel Preview
-      id: deploy
+    - name: Deploy Frontend to Vercel Preview
+      id: deploy_frontend
       run: |
         cd frontend
-        # Deploy and capture the output with preview URL
-        DEPLOY_OUTPUT=$(vercel --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
-        echo "$DEPLOY_OUTPUT"
+        echo "🚀 Deploying frontend..."
+        FRONTEND_OUTPUT=$(vercel --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$FRONTEND_OUTPUT"
         
-        # Extract preview URL from the output
-        PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        # Extract frontend URL
+        FRONTEND_URL=$(echo "$FRONTEND_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
         
-        if [ -n "$PREVIEW_URL" ]; then
-          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
-          echo "🚀 Preview URL found: $PREVIEW_URL"
+        if [ -n "$FRONTEND_URL" ]; then
+          echo "frontend_url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+          echo "✅ Frontend deployed: $FRONTEND_URL"
         else
-          echo "⚠️ Could not extract preview URL from deployment output"
-          echo "preview_url=" >> $GITHUB_OUTPUT
+          echo "❌ Failed to extract frontend URL"
+          echo "frontend_url=" >> $GITHUB_OUTPUT
+        fi
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        
+    - name: Deploy Backend to Vercel Preview  
+      id: deploy_backend
+      run: |
+        cd backend
+        echo "🚀 Deploying backend..."
+        BACKEND_OUTPUT=$(vercel --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$BACKEND_OUTPUT"
+        
+        # Extract backend URL
+        BACKEND_URL=$(echo "$BACKEND_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        
+        if [ -n "$BACKEND_URL" ]; then
+          echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
+          echo "✅ Backend deployed: $BACKEND_URL"
+        else
+          echo "❌ Failed to extract backend URL"
+          echo "backend_url=" >> $GITHUB_OUTPUT
         fi
       env:
         VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

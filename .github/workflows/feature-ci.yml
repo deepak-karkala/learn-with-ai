@@ -1,0 +1,299 @@
+name: Feature Branch CI (Fast Feedback)
+
+on:
+  push:
+    branches-ignore: 
+      - main
+      - develop
+  workflow_dispatch:
+
+# Fail fast - stop on first failure to give immediate feedback
+env:
+  FAIL_FAST: true
+
+jobs:
+  # Job 1: Fast linting and basic checks (< 1 min)
+  quick-checks:
+    runs-on: ubuntu-latest
+    name: Quick Checks (Linting & Format)
+    timeout-minutes: 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+
+    # Frontend linting (parallel with backend)
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci --prefer-offline
+        
+    - name: Frontend linting
+      run: |
+        cd frontend
+        npm run lint
+        echo "✅ Frontend linting passed"
+        
+    - name: Frontend type checking
+      run: |
+        cd frontend
+        npx tsc --noEmit
+        echo "✅ Frontend TypeScript validation passed"
+
+    # Backend linting (parallel with frontend)  
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        uv sync --dev
+        
+    - name: Backend linting
+      run: |
+        cd backend
+        source .venv/bin/activate
+        flake8 app/ --max-line-length=120 --extend-ignore=E203,W503
+        echo "✅ Backend linting passed"
+        
+    - name: Backend type checking
+      run: |
+        cd backend
+        source .venv/bin/activate
+        mypy app/ --ignore-missing-imports
+        echo "✅ Backend type checking passed"
+        
+    - name: Backend formatting check
+      run: |
+        cd backend
+        source .venv/bin/activate
+        black --check app/
+        isort --check-only app/
+        echo "✅ Backend formatting check passed"
+
+  # Job 2: Unit tests (< 3 min)
+  unit-tests:
+    runs-on: ubuntu-latest
+    name: Unit Tests
+    needs: quick-checks
+    timeout-minutes: 10
+    strategy:
+      fail-fast: true
+      matrix:
+        component: [frontend, backend]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js (Frontend)
+      if: matrix.component == 'frontend'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Setup Python (Backend)
+      if: matrix.component == 'backend'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv (Backend)
+      if: matrix.component == 'backend'
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+
+    # Frontend unit tests
+    - name: Frontend unit tests
+      if: matrix.component == 'frontend'
+      run: |
+        cd frontend
+        npm ci --prefer-offline
+        npm test -- --coverage --watchAll=false --testTimeout=10000
+        echo "✅ Frontend unit tests passed"
+        
+    # Backend unit tests  
+    - name: Backend unit tests
+      if: matrix.component == 'backend'
+      run: |
+        cd backend
+        uv sync --dev
+        source .venv/bin/activate
+        python -m pytest tests/ -v --tb=short --maxfail=5 --cov=app --cov-report=term-missing
+        echo "✅ Backend unit tests passed"
+      env:
+        # Mock environment variables for testing
+        GOOGLE_API_KEY: "fake-key-for-testing"
+        ADK_MODEL_NAME: "gemini-2.0-flash-exp"
+
+  # Job 3: Basic integration tests (lightweight API contract tests)
+  api-contract-tests:
+    runs-on: ubuntu-latest
+    name: API Contract Tests
+    needs: unit-tests
+    timeout-minutes: 5
+    if: ${{ !cancelled() }} # Run even if unit tests have warnings
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+        
+    - name: Install dependencies
+      run: |
+        cd backend
+        uv sync --dev
+        
+    - name: API contract validation
+      run: |
+        cd backend
+        source .venv/bin/activate
+        # Test that FastAPI app can start and has correct endpoints
+        python -c "
+        from app.main import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        
+        # Test basic endpoints exist and return correct structure
+        health = client.get('/health')
+        assert health.status_code == 200
+        assert 'status' in health.json()
+        
+        root = client.get('/')
+        assert root.status_code == 200
+        
+        print('✅ API contract tests passed')
+        "
+      env:
+        GOOGLE_API_KEY: "fake-key-for-testing"
+        ADK_MODEL_NAME: "gemini-2.0-flash-exp"
+
+  # Job 4: Build verification (ensure everything compiles)
+  build-verification:
+    runs-on: ubuntu-latest
+    name: Build Verification
+    needs: api-contract-tests
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        component: [frontend, backend]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js (Frontend)
+      if: matrix.component == 'frontend'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Frontend build verification
+      if: matrix.component == 'frontend'
+      run: |
+        cd frontend
+        npm ci --prefer-offline
+        npm run build
+        echo "✅ Frontend build verification passed"
+        
+    - name: Setup Python (Backend)
+      if: matrix.component == 'backend'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv (Backend)
+      if: matrix.component == 'backend'
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+        
+    - name: Backend build verification
+      if: matrix.component == 'backend'
+      run: |
+        cd backend
+        uv sync --dev
+        source .venv/bin/activate
+        # Verify all imports work and app can be imported
+        python -c "from app.main import app; print('✅ Backend build verification passed')"
+      env:
+        GOOGLE_API_KEY: "fake-key-for-testing"
+        ADK_MODEL_NAME: "gemini-2.0-flash-exp"
+
+  # Job 5: Feature CI summary
+  feature-ci-summary:
+    runs-on: ubuntu-latest
+    name: Feature CI Summary
+    needs: [quick-checks, unit-tests, api-contract-tests, build-verification]
+    if: always()
+    
+    steps:
+    - name: Feature CI Results
+      run: |
+        echo "## 🚀 Feature Branch CI Results"
+        echo ""
+        echo "### Fast Feedback Loop Completed"
+        
+        if [ "${{ needs.quick-checks.result }}" == "success" ]; then
+          echo "✅ Quick Checks: PASSED"
+        else
+          echo "❌ Quick Checks: FAILED"
+        fi
+        
+        if [ "${{ needs.unit-tests.result }}" == "success" ]; then
+          echo "✅ Unit Tests: PASSED"
+        else
+          echo "❌ Unit Tests: FAILED"
+        fi
+        
+        if [ "${{ needs.api-contract-tests.result }}" == "success" ]; then
+          echo "✅ API Contract Tests: PASSED"
+        else
+          echo "❌ API Contract Tests: FAILED"
+        fi
+        
+        if [ "${{ needs.build-verification.result }}" == "success" ]; then
+          echo "✅ Build Verification: PASSED"
+        else
+          echo "❌ Build Verification: FAILED"
+        fi
+        
+        echo ""
+        echo "### ⚡ Ready for PR to develop branch"
+        echo "Time to comprehensive validation: PR → develop"
+        
+        # Set exit code based on critical failures
+        if [ "${{ needs.quick-checks.result }}" != "success" ] || [ "${{ needs.unit-tests.result }}" != "success" ]; then
+          echo "❌ Critical failures detected - fix before creating PR"
+          exit 1
+        else
+          echo "✅ All critical checks passed - ready for PR!"
+        fi

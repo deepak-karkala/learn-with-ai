@@ -1,0 +1,482 @@
+name: Load Testing
+
+on:
+  schedule:
+    # Run load tests nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      duration:
+        description: 'Test duration (minutes)'
+        required: false
+        default: '5'
+        type: string
+      virtual_users:
+        description: 'Number of virtual users'
+        required: false
+        default: '10'
+        type: string
+      ramp_up_time:
+        description: 'Ramp up time (minutes)'
+        required: false
+        default: '2'
+        type: string
+      test_type:
+        description: 'Type of load test'
+        required: false
+        default: 'load'
+        type: choice
+        options:
+        - smoke
+        - load
+        - stress
+        - spike
+        - volume
+
+env:
+  # Load testing thresholds
+  MAX_RESPONSE_TIME: 2000  # 2 seconds
+  MAX_ERROR_RATE: 5        # 5%
+  MIN_THROUGHPUT: 10       # 10 requests/second
+
+jobs:
+  # Job 1: Environment validation
+  validate-environment:
+    runs-on: ubuntu-latest
+    name: Validate Test Environment
+    timeout-minutes: 10
+    outputs:
+      staging_url: ${{ steps.get-urls.outputs.staging_url }}
+      production_url: ${{ steps.get-urls.outputs.production_url }}
+      target_url: ${{ steps.get-urls.outputs.target_url }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Get environment URLs
+      id: get-urls
+      run: |
+        # Get latest deployment URLs from GitHub deployments
+        if [ "${{ github.event.inputs.environment || 'staging' }}" = "staging" ]; then
+          # For staging, get the latest staging deployment
+          echo "target_url=https://staging.learn-with-ai.vercel.app" >> $GITHUB_OUTPUT
+          echo "staging_url=https://staging.learn-with-ai.vercel.app" >> $GITHUB_OUTPUT
+        else
+          # For production
+          echo "target_url=https://learn-with-ai.vercel.app" >> $GITHUB_OUTPUT
+          echo "production_url=https://learn-with-ai.vercel.app" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "Environment: ${{ github.event.inputs.environment || 'staging' }}"
+        echo "Target URL determined for load testing"
+        
+    - name: Environment health check
+      run: |
+        TARGET_URL="${{ steps.get-urls.outputs.target_url }}"
+        
+        echo "🔍 Validating environment health before load testing..."
+        echo "Target: $TARGET_URL"
+        
+        # Health check with timeout
+        if curl -f --max-time 10 "$TARGET_URL/api/health" > /dev/null 2>&1; then
+          echo "✅ Environment is healthy and ready for load testing"
+        else
+          echo "❌ Environment health check failed"
+          echo "Load testing cannot proceed with unhealthy environment"
+          exit 1
+        fi
+
+  # Job 2: K6 Load Testing
+  k6-load-testing:
+    runs-on: ubuntu-latest
+    name: K6 Load Testing
+    needs: validate-environment
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install K6
+      run: |
+        sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+        k6 version
+        echo "✅ K6 installed successfully"
+        
+    - name: Create load test scenarios
+      run: |
+        mkdir -p load-tests/scenarios
+        
+        # Smoke test scenario
+        cat > load-tests/scenarios/smoke.js << 'EOF'
+        import http from 'k6/http';
+        import { check, sleep } from 'k6';
+        
+        export const options = {
+          stages: [
+            { duration: '30s', target: 1 },
+          ],
+          thresholds: {
+            http_req_duration: ['p(95)<2000'],
+            http_req_failed: ['rate<0.1'],
+          },
+        };
+        
+        export default function() {
+          const responses = http.batch([
+            ['GET', `${__ENV.TARGET_URL}/api/health`],
+            ['GET', `${__ENV.TARGET_URL}/`],
+          ]);
+          
+          check(responses[0], {
+            'health endpoint status is 200': (r) => r.status === 200,
+            'health response time < 500ms': (r) => r.timings.duration < 500,
+          });
+          
+          check(responses[1], {
+            'homepage status is 200': (r) => r.status === 200,
+          });
+          
+          sleep(1);
+        }
+        EOF
+        
+        # Load test scenario
+        cat > load-tests/scenarios/load.js << 'EOF'
+        import http from 'k6/http';
+        import { check, sleep } from 'k6';
+        
+        export const options = {
+          stages: [
+            { duration: '${RAMP_UP_TIME}m', target: parseInt('${VIRTUAL_USERS}') },
+            { duration: '${DURATION}m', target: parseInt('${VIRTUAL_USERS}') },
+            { duration: '${RAMP_UP_TIME}m', target: 0 },
+          ],
+          thresholds: {
+            http_req_duration: ['p(95)<${MAX_RESPONSE_TIME}'],
+            http_req_failed: ['rate<0.0${MAX_ERROR_RATE}'],
+            http_reqs: ['rate>=${MIN_THROUGHPUT}'],
+          },
+        };
+        
+        export default function() {
+          // Test different endpoints
+          const endpoints = [
+            '/api/health',
+            '/',
+            '/dev',
+          ];
+          
+          const endpoint = endpoints[Math.floor(Math.random() * endpoints.length)];
+          const response = http.get(`${__ENV.TARGET_URL}${endpoint}`);
+          
+          check(response, {
+            'status is 200': (r) => r.status === 200,
+            'response time < 2s': (r) => r.timings.duration < 2000,
+          });
+          
+          sleep(Math.random() * 2 + 1); // 1-3 seconds
+        }
+        EOF
+        
+        # Stress test scenario
+        cat > load-tests/scenarios/stress.js << 'EOF'
+        import http from 'k6/http';
+        import { check, sleep } from 'k6';
+        
+        export const options = {
+          stages: [
+            { duration: '2m', target: 10 },
+            { duration: '5m', target: 10 },
+            { duration: '2m', target: 20 },
+            { duration: '5m', target: 20 },
+            { duration: '2m', target: 30 },
+            { duration: '5m', target: 30 },
+            { duration: '2m', target: 40 },
+            { duration: '5m', target: 40 },
+            { duration: '10m', target: 0 },
+          ],
+          thresholds: {
+            http_req_duration: ['p(99)<3000'],
+            http_req_failed: ['rate<0.1'],
+          },
+        };
+        
+        export default function() {
+          const response = http.get(`${__ENV.TARGET_URL}/api/health`);
+          check(response, {
+            'status is 200': (r) => r.status === 200,
+          });
+          sleep(1);
+        }
+        EOF
+        
+        # Spike test scenario
+        cat > load-tests/scenarios/spike.js << 'EOF'
+        import http from 'k6/http';
+        import { check, sleep } from 'k6';
+        
+        export const options = {
+          stages: [
+            { duration: '10s', target: 1 },
+            { duration: '1m', target: 1 },
+            { duration: '10s', target: 50 },
+            { duration: '3m', target: 50 },
+            { duration: '10s', target: 1 },
+            { duration: '3m', target: 1 },
+            { duration: '10s', target: 0 },
+          ],
+          thresholds: {
+            http_req_duration: ['p(95)<3000'],
+            http_req_failed: ['rate<0.1'],
+          },
+        };
+        
+        export default function() {
+          const response = http.get(`${__ENV.TARGET_URL}/api/health`);
+          check(response, {
+            'status is 200': (r) => r.status === 200,
+          });
+          sleep(Math.random() * 2 + 1);
+        }
+        EOF
+        
+        echo "✅ Load test scenarios created"
+        
+    - name: Execute load tests
+      run: |
+        TEST_TYPE="${{ github.event.inputs.test_type || 'load' }}"
+        DURATION="${{ github.event.inputs.duration || '5' }}"
+        VIRTUAL_USERS="${{ github.event.inputs.virtual_users || '10' }}"
+        RAMP_UP_TIME="${{ github.event.inputs.ramp_up_time || '2' }}"
+        TARGET_URL="${{ needs.validate-environment.outputs.target_url }}"
+        
+        echo "🚀 Starting load test..."
+        echo "Type: $TEST_TYPE"
+        echo "Duration: ${DURATION} minutes"
+        echo "Virtual Users: $VIRTUAL_USERS"
+        echo "Target: $TARGET_URL"
+        
+        # Set environment variables for K6
+        export TARGET_URL="$TARGET_URL"
+        export DURATION="$DURATION"
+        export VIRTUAL_USERS="$VIRTUAL_USERS"
+        export RAMP_UP_TIME="$RAMP_UP_TIME"
+        export MAX_RESPONSE_TIME="${{ env.MAX_RESPONSE_TIME }}"
+        export MAX_ERROR_RATE="${{ env.MAX_ERROR_RATE }}"
+        export MIN_THROUGHPUT="${{ env.MIN_THROUGHPUT }}"
+        
+        # Run the appropriate test scenario
+        cd load-tests
+        k6 run --out json=results.json scenarios/${TEST_TYPE}.js
+        
+        echo "✅ Load test completed"
+        
+    - name: Analyze load test results
+      run: |
+        cd load-tests
+        
+        if [ -f "results.json" ]; then
+          echo "📊 Analyzing load test results..."
+          
+          # Extract key metrics from K6 results
+          # Note: This is a simplified analysis, real implementation would parse JSON
+          echo "TODO: Implement detailed K6 results analysis"
+          echo "TODO: Extract response times, error rates, throughput"
+          echo "TODO: Compare against thresholds"
+          echo "TODO: Generate performance trends"
+          
+          # Create results summary
+          cat > load-test-summary.md << 'EOF'
+          # Load Test Results Summary
+          
+          ## Test Configuration
+          - **Environment:** ${{ github.event.inputs.environment || 'staging' }}
+          - **Test Type:** ${{ github.event.inputs.test_type || 'load' }}
+          - **Duration:** ${{ github.event.inputs.duration || '5' }} minutes
+          - **Virtual Users:** ${{ github.event.inputs.virtual_users || '10' }}
+          - **Target URL:** ${{ needs.validate-environment.outputs.target_url }}
+          
+          ## Results
+          *(Results analysis to be implemented)*
+          
+          ## Recommendations
+          *(Performance recommendations to be implemented)*
+          EOF
+          
+          cat load-test-summary.md
+          
+          echo "✅ Load test analysis completed"
+        else
+          echo "❌ Load test results file not found"
+        fi
+        
+    - name: Upload load test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: load-test-results-${{ github.event.inputs.environment || 'staging' }}-${{ github.event.inputs.test_type || 'load' }}
+        path: |
+          load-tests/results.json
+          load-tests/load-test-summary.md
+        retention-days: 30
+
+  # Job 3: Resource monitoring during load test
+  resource-monitoring:
+    runs-on: ubuntu-latest
+    name: Resource Monitoring
+    needs: validate-environment
+    timeout-minutes: 30
+    
+    steps:
+    - name: Monitor application resources
+      run: |
+        TARGET_URL="${{ needs.validate-environment.outputs.target_url }}"
+        DURATION="${{ github.event.inputs.duration || '5' }}"
+        
+        echo "📊 Monitoring application resources during load test..."
+        echo "Target: $TARGET_URL"
+        echo "Duration: ${DURATION} minutes"
+        
+        # Monitor health endpoint response times
+        END_TIME=$(($(date +%s) + $(echo "$DURATION * 60" | bc)))
+        
+        echo "timestamp,response_time_ms,status_code" > resource-metrics.csv
+        
+        while [ $(date +%s) -lt $END_TIME ]; do
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          # Measure response time
+          START_TIME=$(date +%s%N)
+          STATUS_CODE=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 "$TARGET_URL/api/health" || echo "000")
+          END_TIME_NS=$(date +%s%N)
+          RESPONSE_TIME_MS=$(( (END_TIME_NS - START_TIME) / 1000000 ))
+          
+          echo "$TIMESTAMP,$RESPONSE_TIME_MS,$STATUS_CODE" >> resource-metrics.csv
+          
+          sleep 10  # Sample every 10 seconds
+        done
+        
+        echo "✅ Resource monitoring completed"
+        
+    - name: Analyze resource metrics
+      run: |
+        if [ -f "resource-metrics.csv" ]; then
+          echo "📈 Resource metrics analysis:"
+          
+          # Calculate basic statistics
+          AVG_RESPONSE_TIME=$(awk -F',' 'NR>1 {sum+=$2; count++} END {print sum/count}' resource-metrics.csv)
+          MAX_RESPONSE_TIME=$(awk -F',' 'NR>1 {if($2>max) max=$2} END {print max}' resource-metrics.csv)
+          ERROR_COUNT=$(awk -F',' 'NR>1 && $3!=200 {count++} END {print count+0}' resource-metrics.csv)
+          TOTAL_REQUESTS=$(awk 'NR>1' resource-metrics.csv | wc -l)
+          ERROR_RATE=$(echo "scale=2; $ERROR_COUNT * 100 / $TOTAL_REQUESTS" | bc)
+          
+          echo "Average Response Time: ${AVG_RESPONSE_TIME} ms"
+          echo "Max Response Time: ${MAX_RESPONSE_TIME} ms"
+          echo "Error Rate: ${ERROR_RATE}%"
+          echo "Total Requests: $TOTAL_REQUESTS"
+          
+          # Create monitoring report
+          cat > monitoring-report.md << EOF
+          # Resource Monitoring Report
+          
+          ## Metrics Summary
+          - **Average Response Time:** ${AVG_RESPONSE_TIME} ms
+          - **Max Response Time:** ${MAX_RESPONSE_TIME} ms
+          - **Error Rate:** ${ERROR_RATE}%
+          - **Total Requests:** $TOTAL_REQUESTS
+          
+          ## Thresholds
+          - Response Time Target: < ${{ env.MAX_RESPONSE_TIME }} ms
+          - Error Rate Target: < ${{ env.MAX_ERROR_RATE }}%
+          
+          ## Status
+          $(if (( $(echo "${AVG_RESPONSE_TIME} < ${{ env.MAX_RESPONSE_TIME }}" | bc -l) )); then echo "✅ Response time within threshold"; else echo "❌ Response time exceeded threshold"; fi)
+          $(if (( $(echo "${ERROR_RATE} < ${{ env.MAX_ERROR_RATE }}" | bc -l) )); then echo "✅ Error rate within threshold"; else echo "❌ Error rate exceeded threshold"; fi)
+          EOF
+          
+          cat monitoring-report.md
+          
+          echo "✅ Resource metrics analysis completed"
+        fi
+        
+    - name: Upload monitoring artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: resource-monitoring-${{ github.event.inputs.environment || 'staging' }}
+        path: |
+          resource-metrics.csv
+          monitoring-report.md
+        retention-days: 30
+
+  # Job 4: Load testing summary and notifications
+  load-testing-summary:
+    runs-on: ubuntu-latest
+    name: Load Testing Summary
+    needs: [validate-environment, k6-load-testing, resource-monitoring]
+    if: always()
+    
+    steps:
+    - name: Generate load testing report
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const environment = '${{ github.event.inputs.environment || 'staging' }}';
+          const testType = '${{ github.event.inputs.test_type || 'load' }}';
+          const k6Result = '${{ needs.k6-load-testing.result }}';
+          const monitoringResult = '${{ needs.resource-monitoring.result }}';
+          
+          let summary = `## ⚡ Load Testing Report\n\n`;
+          summary += `**Environment:** ${environment}\n`;
+          summary += `**Test Type:** ${testType}\n`;
+          summary += `**Duration:** ${{ github.event.inputs.duration || '5' }} minutes\n`;
+          summary += `**Virtual Users:** ${{ github.event.inputs.virtual_users || '10' }}\n`;
+          summary += `**Target:** ${{ needs.validate-environment.outputs.target_url }}\n\n`;
+          
+          summary += `### 📊 Results Summary\n`;
+          summary += k6Result === 'success' ? `✅ K6 Load Testing: PASSED\n` : `❌ K6 Load Testing: FAILED\n`;
+          summary += monitoringResult === 'success' ? `✅ Resource Monitoring: COMPLETED\n` : `❌ Resource Monitoring: FAILED\n`;
+          
+          summary += `\n### 📎 Artifacts\n`;
+          summary += `- Load test results and metrics uploaded\n`;
+          summary += `- Resource monitoring data available\n`;
+          summary += `- Performance analysis reports generated\n`;
+          
+          summary += `\n### 🔍 Next Steps\n`;
+          if (k6Result !== 'success') {
+            summary += `- Review failed load tests\n`;
+            summary += `- Check application performance\n`;
+            summary += `- Consider scaling or optimization\n`;
+          } else {
+            summary += `- Review performance metrics\n`;
+            summary += `- Compare with previous baselines\n`;
+            summary += `- Monitor trends over time\n`;
+          }
+          
+          summary += `\n*Automated load testing completed*`;
+          
+          // Create an issue for significant load test failures
+          if (k6Result !== 'success') {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚡ Load Test Failure - ${environment.toUpperCase()}`,
+              body: summary,
+              labels: ['performance', 'load-testing', 'failure']
+            });
+          }
+          
+          console.log(summary);

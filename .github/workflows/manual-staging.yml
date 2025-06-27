@@ -1,7 +1,8 @@
-name: Manual Staging Deploy
-
-on:
-  workflow_dispatch:
+# DISABLED - Replaced by staging-deploy.yml (automatic on develop push)
+# name: Manual Staging Deploy
+#
+# on:
+#   workflow_dispatch:
     inputs:
       pr_number:
         description: 'PR number to deploy to staging'

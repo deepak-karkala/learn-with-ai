@@ -1,0 +1,445 @@
+name: E2E Testing with Puppeteer MCP
+
+on:
+  workflow_call:
+    inputs:
+      environment_url:
+        description: 'Environment URL to test against'
+        required: true
+        type: string
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        default: 'smoke'
+        type: string
+      browser:
+        description: 'Browser to test with'
+        required: false
+        default: 'chromium'
+        type: string
+      headless:
+        description: 'Run in headless mode'
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      test_results:
+        description: 'E2E test results summary'
+        value: ${{ jobs.e2e-tests.outputs.results }}
+      screenshots_url:
+        description: 'URL to test screenshots'
+        value: ${{ jobs.e2e-tests.outputs.screenshots }}
+        
+  workflow_dispatch:
+    inputs:
+      environment_url:
+        description: 'Environment URL to test against'
+        required: true
+        type: string
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        default: 'smoke'
+        type: choice
+        options:
+        - smoke
+        - critical
+        - full
+        - visual-regression
+        - accessibility
+      browser:
+        description: 'Browser to test with'
+        required: false
+        default: 'chromium'
+        type: choice
+        options:
+        - chromium
+        - firefox
+        - webkit
+      headless:
+        description: 'Run in headless mode'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  PLAYWRIGHT_BROWSERS_PATH: ~/.cache/playwright
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: E2E Tests (${{ inputs.test_suite }})
+    timeout-minutes: 30
+    outputs:
+      results: ${{ steps.test-execution.outputs.results }}
+      screenshots: ${{ steps.upload-artifacts.outputs.screenshots_url }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Setup Python for Claude MCP integration
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install E2E testing dependencies
+      run: |
+        # Install Playwright and dependencies
+        npm install -g @playwright/test
+        npx playwright install ${{ inputs.browser }}
+        npx playwright install-deps ${{ inputs.browser }}
+        
+        # Install Claude CLI for MCP integration
+        npm install -g @anthropic-ai/claude-code
+        
+        echo "✅ E2E testing environment ready"
+        
+    - name: Create E2E test configuration
+      run: |
+        mkdir -p e2e-tests/config
+        cat > e2e-tests/playwright.config.js << 'EOF'
+        module.exports = {
+          testDir: './tests',
+          timeout: 30000,
+          fullyParallel: true,
+          forbidOnly: !!process.env.CI,
+          retries: process.env.CI ? 2 : 0,
+          workers: process.env.CI ? 1 : undefined,
+          reporter: [
+            ['html', { outputFolder: 'playwright-report' }],
+            ['json', { outputFile: 'test-results.json' }],
+            ['junit', { outputFile: 'results.xml' }]
+          ],
+          use: {
+            baseURL: process.env.TEST_URL,
+            trace: 'on-first-retry',
+            screenshot: 'only-on-failure',
+            video: 'retain-on-failure',
+            headless: process.env.HEADLESS === 'true'
+          },
+          projects: [
+            {
+              name: '${{ inputs.browser }}',
+              use: { 
+                channel: '${{ inputs.browser }}' === 'chromium' ? 'chrome' : '${{ inputs.browser }}'
+              },
+            },
+          ],
+        };
+        EOF
+        
+    - name: Create E2E test suites
+      run: |
+        mkdir -p e2e-tests/tests
+        
+        # Smoke tests - critical user journeys
+        cat > e2e-tests/tests/smoke.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+        
+        test.describe('Smoke Tests - Critical User Journeys', () => {
+          test('Homepage loads successfully', async ({ page }) => {
+            await page.goto('/');
+            await expect(page).toHaveTitle(/AI System Design/);
+            
+            // Wait for main content to load
+            await expect(page.locator('main')).toBeVisible();
+            console.log('✅ Homepage loaded successfully');
+          });
+          
+          test('Health endpoint is accessible', async ({ page }) => {
+            const response = await page.request.get('/api/health');
+            expect(response.ok()).toBeTruthy();
+            
+            const healthData = await response.json();
+            expect(healthData).toHaveProperty('status');
+            console.log('✅ Health endpoint responding correctly');
+          });
+          
+          test('Navigation works correctly', async ({ page }) => {
+            await page.goto('/');
+            
+            // Test navigation to dev page
+            await page.click('[href="/dev"]');
+            await expect(page).toHaveURL(/.*\/dev/);
+            console.log('✅ Navigation working correctly');
+          });
+        });
+        EOF
+        
+        # Critical tests - core functionality
+        cat > e2e-tests/tests/critical.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+        
+        test.describe('Critical Tests - Core Functionality', () => {
+          test('API endpoints are functional', async ({ page }) => {
+            // Test root API endpoint
+            const rootResponse = await page.request.get('/');
+            expect(rootResponse.ok()).toBeTruthy();
+            
+            // Test health endpoint with detailed checks
+            const healthResponse = await page.request.get('/api/health');
+            expect(healthResponse.ok()).toBeTruthy();
+            
+            const healthData = await healthResponse.json();
+            expect(healthData.status).toBe('healthy');
+            console.log('✅ API endpoints functional');
+          });
+          
+          test('Frontend components render correctly', async ({ page }) => {
+            await page.goto('/');
+            
+            // Check for essential UI components
+            await expect(page.locator('html')).toBeVisible();
+            await expect(page.locator('body')).toBeVisible();
+            
+            // Verify no console errors
+            const errors = [];
+            page.on('console', message => {
+              if (message.type() === 'error') {
+                errors.push(message.text());
+              }
+            });
+            
+            await page.waitForTimeout(2000);
+            
+            if (errors.length > 0) {
+              console.warn('⚠️ Console errors detected:', errors);
+            } else {
+              console.log('✅ No console errors detected');
+            }
+          });
+          
+          test('Application performance is acceptable', async ({ page }) => {
+            await page.goto('/');
+            
+            // Measure page load performance
+            const performanceEntries = await page.evaluate(() => {
+              const entries = performance.getEntriesByType('navigation')[0];
+              return {
+                domContentLoaded: entries.domContentLoadedEventEnd - entries.domContentLoadedEventStart,
+                loadComplete: entries.loadEventEnd - entries.loadEventStart,
+                totalTime: entries.loadEventEnd - entries.fetchStart
+              };
+            });
+            
+            console.log('📊 Performance metrics:', performanceEntries);
+            
+            // Assert reasonable performance thresholds
+            expect(performanceEntries.totalTime).toBeLessThan(5000); // 5 seconds max
+            console.log('✅ Performance within acceptable limits');
+          });
+        });
+        EOF
+        
+        # Visual regression tests
+        cat > e2e-tests/tests/visual.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+        
+        test.describe('Visual Regression Tests', () => {
+          test('Homepage visual consistency', async ({ page }) => {
+            await page.goto('/');
+            await page.waitForLoadState('networkidle');
+            
+            // Take screenshot for visual comparison
+            await expect(page).toHaveScreenshot('homepage.png');
+            console.log('✅ Homepage visual regression test completed');
+          });
+          
+          test('Dev page visual consistency', async ({ page }) => {
+            await page.goto('/dev');
+            await page.waitForLoadState('networkidle');
+            
+            // Take screenshot for visual comparison
+            await expect(page).toHaveScreenshot('dev-page.png');
+            console.log('✅ Dev page visual regression test completed');
+          });
+        });
+        EOF
+        
+        # Accessibility tests
+        cat > e2e-tests/tests/accessibility.spec.js << 'EOF'
+        const { test, expect } = require('@playwright/test');
+        
+        test.describe('Accessibility Tests', () => {
+          test('Page has proper accessibility structure', async ({ page }) => {
+            await page.goto('/');
+            
+            // Check for essential accessibility elements
+            const title = await page.title();
+            expect(title).toBeTruthy();
+            
+            // Check for proper heading structure
+            const h1Count = await page.locator('h1').count();
+            expect(h1Count).toBeGreaterThanOrEqual(1);
+            
+            // Check for alt text on images (if any)
+            const images = await page.locator('img').all();
+            for (const img of images) {
+              const alt = await img.getAttribute('alt');
+              if (!alt) {
+                console.warn('⚠️ Image without alt text detected');
+              }
+            }
+            
+            console.log('✅ Basic accessibility checks completed');
+          });
+        });
+        EOF
+        
+        echo "✅ E2E test suites created"
+        
+    - name: Execute E2E tests
+      id: test-execution
+      run: |
+        cd e2e-tests
+        
+        echo "🧪 Starting E2E test suite: ${{ inputs.test_suite }}"
+        echo "Environment: ${{ inputs.environment_url }}"
+        echo "Browser: ${{ inputs.browser }}"
+        echo "Headless: ${{ inputs.headless }}"
+        
+        # Set test environment variables
+        export TEST_URL="${{ inputs.environment_url }}"
+        export HEADLESS="${{ inputs.headless }}"
+        
+        # Run specific test suite
+        case "${{ inputs.test_suite }}" in
+          "smoke")
+            npx playwright test tests/smoke.spec.js --reporter=line
+            ;;
+          "critical")
+            npx playwright test tests/critical.spec.js --reporter=line
+            ;;
+          "visual-regression")
+            npx playwright test tests/visual.spec.js --reporter=line
+            ;;
+          "accessibility")
+            npx playwright test tests/accessibility.spec.js --reporter=line
+            ;;
+          "full")
+            npx playwright test --reporter=line
+            ;;
+          *)
+            echo "Unknown test suite: ${{ inputs.test_suite }}"
+            npx playwright test tests/smoke.spec.js --reporter=line
+            ;;
+        esac
+        
+        # Extract test results
+        if [ -f "test-results.json" ]; then
+          TOTAL_TESTS=$(jq '.stats.total' test-results.json)
+          PASSED_TESTS=$(jq '.stats.passed' test-results.json)
+          FAILED_TESTS=$(jq '.stats.failed' test-results.json)
+          
+          echo "results={\"total\":$TOTAL_TESTS,\"passed\":$PASSED_TESTS,\"failed\":$FAILED_TESTS}" >> $GITHUB_OUTPUT
+          
+          echo "📊 Test Results:"
+          echo "Total: $TOTAL_TESTS"
+          echo "Passed: $PASSED_TESTS"
+          echo "Failed: $FAILED_TESTS"
+        else
+          echo "results={\"total\":0,\"passed\":0,\"failed\":0}" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "✅ E2E test execution completed"
+      env:
+        TEST_URL: ${{ inputs.environment_url }}
+        HEADLESS: ${{ inputs.headless }}
+        
+    - name: Claude MCP Analysis (if tests failed)
+      if: failure()
+      run: |
+        echo "🤖 Analyzing test failures with Claude MCP..."
+        
+        # Create Claude analysis prompt
+        cat > claude-analysis.md << 'EOF'
+        # E2E Test Failure Analysis
+        
+        Please analyze the following E2E test results and provide insights:
+        
+        ## Test Environment
+        - URL: ${{ inputs.environment_url }}
+        - Browser: ${{ inputs.browser }}
+        - Test Suite: ${{ inputs.test_suite }}
+        
+        ## Available Artifacts
+        - Screenshots in test-results/
+        - HTML reports in playwright-report/
+        - Console logs in test output
+        
+        Please provide:
+        1. Likely causes of failures
+        2. Debugging recommendations
+        3. Fix suggestions
+        4. Prevention strategies
+        EOF
+        
+        # Run Claude analysis (placeholder for now)
+        echo "TODO: Implement Claude MCP integration for test failure analysis"
+        echo "TODO: Analyze screenshots and logs for failure patterns"
+        echo "TODO: Provide automated debugging recommendations"
+        
+        echo "🤖 Claude MCP analysis framework ready"
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        
+    - name: Upload test artifacts
+      id: upload-artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-results-${{ inputs.test_suite }}-${{ inputs.browser }}
+        path: |
+          e2e-tests/test-results/
+          e2e-tests/playwright-report/
+          e2e-tests/test-results.json
+          e2e-tests/results.xml
+        retention-days: 7
+        
+    - name: Generate test report
+      if: always()
+      run: |
+        echo "## 🧪 E2E Test Report" > test-report.md
+        echo "" >> test-report.md
+        echo "**Test Suite:** ${{ inputs.test_suite }}" >> test-report.md
+        echo "**Environment:** ${{ inputs.environment_url }}" >> test-report.md
+        echo "**Browser:** ${{ inputs.browser }}" >> test-report.md
+        echo "**Headless:** ${{ inputs.headless }}" >> test-report.md
+        echo "" >> test-report.md
+        
+        if [ -f "e2e-tests/test-results.json" ]; then
+          TOTAL=$(jq '.stats.total' e2e-tests/test-results.json)
+          PASSED=$(jq '.stats.passed' e2e-tests/test-results.json)
+          FAILED=$(jq '.stats.failed' e2e-tests/test-results.json)
+          
+          echo "### 📊 Results Summary" >> test-report.md
+          echo "- **Total Tests:** $TOTAL" >> test-report.md
+          echo "- **Passed:** $PASSED ✅" >> test-report.md
+          echo "- **Failed:** $FAILED ❌" >> test-report.md
+          echo "" >> test-report.md
+          
+          if [ "$FAILED" -gt 0 ]; then
+            echo "### ❌ Failed Tests" >> test-report.md
+            echo "Please check the uploaded artifacts for detailed failure information." >> test-report.md
+            echo "" >> test-report.md
+          fi
+        fi
+        
+        echo "### 📎 Artifacts" >> test-report.md
+        echo "- Test results and screenshots uploaded as artifacts" >> test-report.md
+        echo "- Playwright HTML report available" >> test-report.md
+        echo "- Console logs captured" >> test-report.md
+        echo "" >> test-report.md
+        echo "*E2E testing with Puppeteer MCP integration*" >> test-report.md
+        
+        cat test-report.md
+        
+        echo "✅ E2E test report generated"

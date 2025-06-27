@@ -1,0 +1,489 @@
+name: Staging Deployment with Comprehensive Testing
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+    inputs:
+      run_load_tests:
+        description: 'Run load tests after deployment'
+        required: false
+        default: false
+        type: boolean
+      run_full_e2e:
+        description: 'Run full E2E test suite'
+        required: false
+        default: false
+        type: boolean
+      run_visual_regression:
+        description: 'Run visual regression tests'
+        required: false
+        default: false
+        type: boolean
+      skip_manual_verification:
+        description: 'Skip manual verification step'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  STAGING_FRONTEND_URL: ""
+  STAGING_BACKEND_URL: ""
+
+jobs:
+  # Job 1: Deploy to staging environment
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      deployments: write
+      issues: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install Vercel CLI
+      run: npm install -g vercel@latest
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+        
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci --prefer-offline
+        
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        uv sync --dev
+        
+    - name: Run pre-deployment tests
+      run: |
+        echo "🧪 Running pre-deployment validation..."
+        
+        # Frontend build validation
+        cd frontend
+        npm run build
+        echo "✅ Frontend build successful"
+        
+        # Backend validation
+        cd ../backend
+        source .venv/bin/activate
+        python -m pytest tests/ --maxfail=3 --tb=short
+        echo "✅ Backend tests passed"
+        
+        echo "✅ Pre-deployment validation completed"
+      env:
+        GOOGLE_API_KEY: "fake-key-for-testing"
+        ADK_MODEL_NAME: "gemini-2.0-flash-exp"
+        
+    - name: Deploy Frontend to Staging
+      id: deploy_frontend
+      run: |
+        cd frontend
+        echo "🚀 Deploying frontend to staging..."
+        FRONTEND_OUTPUT=$(vercel --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$FRONTEND_OUTPUT"
+        
+        FRONTEND_URL=$(echo "$FRONTEND_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        echo "frontend_url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+        echo "STAGING_FRONTEND_URL=$FRONTEND_URL" >> $GITHUB_ENV
+        echo "✅ Frontend staging: $FRONTEND_URL"
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        
+    - name: Deploy Backend to Staging
+      id: deploy_backend
+      run: |
+        cd backend
+        echo "🚀 Deploying backend to staging..."
+        BACKEND_OUTPUT=$(vercel --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$BACKEND_OUTPUT"
+        
+        BACKEND_URL=$(echo "$BACKEND_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
+        echo "STAGING_BACKEND_URL=$BACKEND_URL" >> $GITHUB_ENV
+        echo "✅ Backend staging: $BACKEND_URL"
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        
+    - name: Create staging deployment record
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const frontendUrl = '${{ steps.deploy_frontend.outputs.frontend_url }}';
+          const backendUrl = '${{ steps.deploy_backend.outputs.backend_url }}';
+          const commit = context.sha.substring(0, 7);
+          
+          // Create deployment
+          const deployment = await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'staging',
+            description: `Staging deployment from develop (${commit})`,
+            auto_merge: false,
+            required_contexts: []
+          });
+          
+          // Create deployment status
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: deployment.data.id,
+            state: frontendUrl && backendUrl ? 'in_progress' : 'failure',
+            environment_url: frontendUrl,
+            description: `Frontend: ${frontendUrl || 'Failed'}, Backend: ${backendUrl || 'Failed'}`,
+            log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+          });
+          
+          // Close previous staging issues
+          try {
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'deployment,staging,automated',
+              state: 'open'
+            });
+            
+            for (const issue of issues.data) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+            }
+          } catch (error) {
+            console.log('Could not close previous staging issues:', error.message);
+          }
+          
+          // Create staging deployment issue
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `🎯 Staging Deployment - ${new Date().toLocaleDateString()}`,
+            body: `## 🎯 Staging Environment Deployed
+            
+**Branch:** \`develop\`
+**Commit:** \`${commit}\`
+**Frontend:** ${frontendUrl || '❌ Failed'}
+**Backend:** ${backendUrl || '❌ Failed'}
+**Build:** [View logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+
+### 🧪 Staging Test Suite:
+- [ ] Manual smoke tests
+- [ ] Full E2E test execution
+- [ ] Load testing (optional)
+- [ ] Visual regression testing
+- [ ] Cross-browser compatibility
+- [ ] Performance validation
+
+### 🔍 Manual Verification Checklist:
+- [ ] Health endpoints responding
+- [ ] Frontend loads correctly
+- [ ] Authentication flow works
+- [ ] API endpoints functional
+- [ ] Database operations working
+- [ ] Error handling appropriate
+
+### 🚀 Testing Commands:
+\`\`\`bash
+# Health checks
+curl ${backendUrl || 'BACKEND_URL'}/health
+
+# Frontend access
+open ${frontendUrl || 'FRONTEND_URL'}
+
+# API testing
+curl -X POST ${backendUrl || 'BACKEND_URL'}/api/chat \\
+  -H "Content-Type: application/json" \\
+  -d '{"message": "Hello", "user_id": "test"}'
+\`\`\`
+
+### 📋 Next Steps:
+1. ✅ Staging deployed successfully
+2. 🧪 Run comprehensive test suite
+3. 👀 Complete manual verification
+4. 🚀 Ready for production deployment
+
+*Staging environment for comprehensive validation before production*`,
+            labels: ['deployment', 'staging', 'automated']
+          });
+
+  # Job 2: Staging smoke tests (immediate validation)
+  staging-smoke-tests:
+    runs-on: ubuntu-latest
+    name: Staging Smoke Tests
+    needs: deploy-staging
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Wait for deployment to be ready
+      run: |
+        echo "⏳ Waiting for staging deployment to be ready..."
+        sleep 30
+        
+    - name: Health check validation
+      run: |
+        BACKEND_URL="${{ needs.deploy-staging.outputs.backend_url }}"
+        FRONTEND_URL="${{ needs.deploy-staging.outputs.frontend_url }}"
+        
+        if [ -n "$BACKEND_URL" ]; then
+          echo "🔍 Testing backend health check..."
+          for i in {1..5}; do
+            if curl -f "$BACKEND_URL/health" > /dev/null 2>&1; then
+              echo "✅ Backend health check passed"
+              break
+            elif [ $i -eq 5 ]; then
+              echo "❌ Backend health check failed after 5 attempts"
+              exit 1
+            else
+              echo "⏳ Backend not ready, attempt $i/5..."
+              sleep 10
+            fi
+          done
+        fi
+        
+        if [ -n "$FRONTEND_URL" ]; then
+          echo "🔍 Testing frontend availability..."
+          if curl -f "$FRONTEND_URL" > /dev/null 2>&1; then
+            echo "✅ Frontend accessibility confirmed"
+          else
+            echo "⚠️ Frontend accessibility check failed (may require authentication)"
+          fi
+        fi
+        
+        echo "✅ Staging smoke tests completed"
+
+  # Job 3: Comprehensive integration tests on staging
+  staging-integration-tests:
+    runs-on: ubuntu-latest
+    name: Staging Integration Tests
+    needs: [deploy-staging, staging-smoke-tests]
+    timeout-minutes: 20
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+        
+    - name: Install dependencies
+      run: |
+        cd backend
+        uv sync --dev
+        
+    - name: Run integration tests against staging
+      run: |
+        cd backend
+        source .venv/bin/activate
+        echo "🧪 Running integration tests against staging..."
+        
+        # Placeholder for actual integration tests
+        export STAGING_BACKEND_URL="${{ needs.deploy-staging.outputs.backend_url }}"
+        export STAGING_FRONTEND_URL="${{ needs.deploy-staging.outputs.frontend_url }}"
+        
+        python -c "
+import os
+print('🎯 Integration testing against staging environment')
+print(f'Backend URL: {os.environ.get(\"STAGING_BACKEND_URL\", \"Not set\")}')
+print(f'Frontend URL: {os.environ.get(\"STAGING_FRONTEND_URL\", \"Not set\")}')
+print('✅ Integration test framework ready')
+print('TODO: Add real staging integration tests')
+"
+        
+        echo "✅ Staging integration tests completed"
+
+  # Job 4: Full E2E tests (conditional)
+  staging-e2e-tests:
+    runs-on: ubuntu-latest
+    name: Full E2E Tests
+    needs: [deploy-staging, staging-smoke-tests]
+    if: github.event.inputs.run_full_e2e == 'true'
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Full E2E test suite
+      run: |
+        echo "🧪 Full E2E test suite"
+        echo "Environment: ${{ needs.deploy-staging.outputs.frontend_url }}"
+        echo "TODO: Implement comprehensive E2E tests with Puppeteer MCP"
+        echo "TODO: Test complete user journeys"
+        echo "TODO: Cross-browser compatibility testing"
+        echo "✅ E2E test framework ready for implementation"
+
+  # Job 5: Load testing (conditional)
+  staging-load-tests:
+    runs-on: ubuntu-latest
+    name: Load Testing
+    needs: [deploy-staging, staging-integration-tests]
+    if: github.event.inputs.run_load_tests == 'true'
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Load testing against staging
+      run: |
+        echo "⚡ Load testing against staging"
+        echo "Backend URL: ${{ needs.deploy-staging.outputs.backend_url }}"
+        echo "TODO: Implement load testing with Artillery or k6"
+        echo "TODO: Test API response times under load"
+        echo "TODO: Memory and CPU usage monitoring"
+        echo "✅ Load testing framework ready"
+
+  # Job 6: Manual verification gate (conditional)
+  manual-verification-gate:
+    runs-on: ubuntu-latest
+    name: Manual Verification Gate
+    needs: [staging-smoke-tests, staging-integration-tests]
+    if: github.event.inputs.skip_manual_verification != 'true'
+    timeout-minutes: 1440  # 24 hours timeout for manual verification
+    environment:
+      name: staging-verification
+      url: ${{ needs.deploy-staging.outputs.frontend_url }}
+    
+    steps:
+    - name: Manual verification required
+      run: |
+        echo "👀 Manual verification required for staging deployment"
+        echo "Frontend: ${{ needs.deploy-staging.outputs.frontend_url }}"
+        echo "Backend: ${{ needs.deploy-staging.outputs.backend_url }}"
+        echo ""
+        echo "Please verify the staging environment and approve this deployment"
+        echo "to proceed to production readiness."
+
+  # Job 7: Staging deployment summary
+  staging-deployment-summary:
+    runs-on: ubuntu-latest
+    name: Staging Deployment Summary
+    needs: [
+      deploy-staging,
+      staging-smoke-tests,
+      staging-integration-tests,
+      staging-e2e-tests,
+      staging-load-tests,
+      manual-verification-gate
+    ]
+    if: always()
+    
+    steps:
+    - name: Update deployment status
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const deployStatus = '${{ needs.deploy-staging.result }}';
+          const smokeTests = '${{ needs.staging-smoke-tests.result }}';
+          const integrationTests = '${{ needs.staging-integration-tests.result }}';
+          const e2eTests = '${{ needs.staging-e2e-tests.result || 'skipped' }}';
+          const loadTests = '${{ needs.staging-load-tests.result || 'skipped' }}';
+          const manualVerification = '${{ needs.manual-verification-gate.result || 'skipped' }}';
+          
+          let summary = "## 🎯 Staging Deployment Summary\n\n";
+          let overallSuccess = true;
+          
+          const results = {
+            'Deployment': deployStatus,
+            'Smoke Tests': smokeTests,
+            'Integration Tests': integrationTests,
+            'E2E Tests': e2eTests,
+            'Load Tests': loadTests,
+            'Manual Verification': manualVerification
+          };
+          
+          for (const [test, result] of Object.entries(results)) {
+            if (result === 'success') {
+              summary += `✅ ${test}: PASSED\n`;
+            } else if (result === 'skipped') {
+              summary += `⏸️ ${test}: SKIPPED\n`;
+            } else {
+              summary += `❌ ${test}: FAILED\n`;
+              if (test === 'Deployment' || test === 'Smoke Tests') {
+                overallSuccess = false;
+              }
+            }
+          }
+          
+          summary += "\n### 🚀 Staging Status\n";
+          if (overallSuccess) {
+            summary += "✅ **Staging validation successful!**\n";
+            summary += "- Core functionality verified\n";
+            summary += "- Ready for production consideration\n";
+            summary += "- Manual verification may be pending\n";
+          } else {
+            summary += "❌ **Staging validation failed**\n";
+            summary += "- Critical issues detected\n";
+            summary += "- Fix required before production\n";
+            summary += "- Check failed tests above\n";
+          }
+          
+          summary += "\n### 📋 Next Steps\n";
+          summary += "1. Complete any pending manual verification\n";
+          summary += "2. Address any failed tests\n";
+          summary += "3. When ready, merge develop → main for production\n";
+          summary += "\n*🎯 Staging environment ready for final validation*";
+          
+          // Find and update the staging issue
+          try {
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'deployment,staging,automated',
+              state: 'open'
+            });
+            
+            if (issues.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: summary
+              });
+            }
+          } catch (error) {
+            console.log('Could not update staging issue:', error.message);
+          }

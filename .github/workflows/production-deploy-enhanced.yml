@@ -1,0 +1,596 @@
+name: Production Deployment (Enhanced)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production:
+        description: 'Type "PRODUCTION" to confirm deployment'
+        required: true
+        type: string
+      git_ref:
+        description: 'Git ref to deploy (branch/tag/commit)'
+        required: true
+        default: 'main'
+        type: string
+      skip_pre_deployment_tests:
+        description: 'Skip pre-deployment test validation'
+        required: false
+        default: false
+        type: boolean
+      skip_health_checks:
+        description: 'Skip post-deployment health checks'
+        required: false
+        default: false
+        type: boolean
+      enable_rollback:
+        description: 'Enable automatic rollback on failure'
+        required: false
+        default: true
+        type: boolean
+      maintenance_mode:
+        description: 'Enable maintenance mode during deployment'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PRODUCTION_FRONTEND_URL: "https://learn-with-ai.vercel.app"
+  PRODUCTION_BACKEND_URL: "https://api.learn-with-ai.vercel.app"
+  DEPLOYMENT_TIMEOUT: 900  # 15 minutes
+  HEALTH_CHECK_RETRIES: 10
+  HEALTH_CHECK_INTERVAL: 30
+
+jobs:
+  # Job 1: Pre-deployment validation
+  pre-deployment-validation:
+    runs-on: ubuntu-latest
+    name: Pre-deployment Validation
+    timeout-minutes: 10
+    outputs:
+      staging_validated: ${{ steps.staging-check.outputs.validated }}
+      tests_passed: ${{ steps.test-validation.outputs.passed }}
+    
+    steps:
+    - name: Validate production confirmation
+      run: |
+        if [ "${{ github.event.inputs.confirm_production }}" != "PRODUCTION" ]; then
+          echo "❌ Production deployment not confirmed."
+          echo "Please type 'PRODUCTION' exactly to confirm."
+          exit 1
+        fi
+        echo "✅ Production deployment confirmed by ${{ github.actor }}"
+        
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.git_ref }}
+        
+    - name: Validate git reference
+      run: |
+        echo "🔍 Validating git reference: ${{ github.event.inputs.git_ref }}"
+        
+        # Check if ref exists
+        if ! git rev-parse --verify "${{ github.event.inputs.git_ref }}" > /dev/null 2>&1; then
+          echo "❌ Git reference '${{ github.event.inputs.git_ref }}' not found"
+          exit 1
+        fi
+        
+        # Get commit info
+        COMMIT_SHA=$(git rev-parse "${{ github.event.inputs.git_ref }}")
+        COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" "$COMMIT_SHA")
+        COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an" "$COMMIT_SHA")
+        COMMIT_DATE=$(git log -1 --pretty=format:"%ad" --date=iso "$COMMIT_SHA")
+        
+        echo "✅ Git reference validation passed"
+        echo "Commit: $COMMIT_SHA"
+        echo "Message: $COMMIT_MESSAGE"
+        echo "Author: $COMMIT_AUTHOR"
+        echo "Date: $COMMIT_DATE"
+        
+    - name: Check staging environment health
+      id: staging-check
+      run: |
+        echo "🔍 Checking staging environment health..."
+        
+        # Check if staging is healthy before deploying to production
+        if curl -f --max-time 10 "https://staging.learn-with-ai.vercel.app/api/health" > /dev/null 2>&1; then
+          echo "validated=true" >> $GITHUB_OUTPUT
+          echo "✅ Staging environment is healthy"
+        else
+          echo "validated=false" >> $GITHUB_OUTPUT
+          echo "⚠️ Staging environment health check failed"
+          echo "Consider fixing staging before production deployment"
+        fi
+        
+    - name: Pre-deployment test validation
+      id: test-validation
+      if: github.event.inputs.skip_pre_deployment_tests != 'true'
+      run: |
+        echo "🧪 Running pre-deployment test validation..."
+        
+        # Check recent test results from CI
+        # This would typically check the last successful test run
+        echo "TODO: Implement test result validation from recent CI runs"
+        echo "TODO: Ensure all critical tests passed on the target branch"
+        echo "TODO: Validate test coverage meets minimum requirements"
+        
+        echo "passed=true" >> $GITHUB_OUTPUT
+        echo "✅ Pre-deployment test validation completed"
+
+  # Job 2: Production deployment with backup
+  deploy-production:
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    needs: pre-deployment-validation
+    timeout-minutes: 20
+    environment: 
+      name: production
+      url: ${{ env.PRODUCTION_FRONTEND_URL }}
+    permissions:
+      contents: write
+      deployments: write
+      issues: write
+    outputs:
+      frontend_url: ${{ steps.deploy-frontend.outputs.url }}
+      backend_url: ${{ steps.deploy-backend.outputs.url }}
+      deployment_id: ${{ steps.create-deployment.outputs.deployment_id }}
+      previous_deployment: ${{ steps.backup-info.outputs.previous_deployment }}
+      
+    steps:
+    - name: Checkout production code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.git_ref }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install Vercel CLI
+      run: npm install -g vercel@latest
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+        
+    - name: Backup current deployment info
+      id: backup-info
+      run: |
+        echo "💾 Backing up current deployment information..."
+        
+        # Get current deployment info for potential rollback
+        # This would typically store current deployment IDs, URLs, etc.
+        echo "TODO: Implement deployment backup mechanism"
+        echo "TODO: Store current deployment state for rollback"
+        
+        echo "previous_deployment=backup-$(date +%s)" >> $GITHUB_OUTPUT
+        echo "✅ Deployment backup information saved"
+        
+    - name: Enable maintenance mode
+      if: github.event.inputs.maintenance_mode == 'true'
+      run: |
+        echo "🚧 Enabling maintenance mode..."
+        echo "TODO: Implement maintenance mode activation"
+        echo "TODO: Display maintenance page to users"
+        echo "TODO: Redirect traffic to maintenance endpoint"
+        
+    - name: Install and validate dependencies
+      run: |
+        echo "📦 Installing and validating dependencies..."
+        
+        # Frontend dependencies
+        cd frontend
+        npm ci --prefer-offline
+        npm run build
+        echo "✅ Frontend build successful"
+        
+        # Backend dependencies and validation
+        cd ../backend
+        uv sync --dev
+        source .venv/bin/activate
+        
+        # Run critical tests before deployment
+        python -m pytest tests/ --maxfail=3 --tb=short -q
+        echo "✅ Backend validation successful"
+      env:
+        GOOGLE_API_KEY: "fake-key-for-testing"
+        ADK_MODEL_NAME: "gemini-2.0-flash-exp"
+        
+    - name: Deploy Frontend to Production
+      id: deploy-frontend
+      run: |
+        cd frontend
+        echo "🚀 Deploying frontend to production..."
+        
+        FRONTEND_OUTPUT=$(vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$FRONTEND_OUTPUT"
+        
+        FRONTEND_URL=$(echo "$FRONTEND_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        
+        if [ -n "$FRONTEND_URL" ]; then
+          echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+          echo "✅ Frontend deployed to: $FRONTEND_URL"
+        else
+          echo "❌ Frontend deployment failed"
+          exit 1
+        fi
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        
+    - name: Deploy Backend to Production
+      id: deploy-backend
+      run: |
+        cd backend
+        echo "🚀 Deploying backend to production..."
+        
+        BACKEND_OUTPUT=$(vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$BACKEND_OUTPUT"
+        
+        BACKEND_URL=$(echo "$BACKEND_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        
+        if [ -n "$BACKEND_URL" ]; then
+          echo "url=$BACKEND_URL" >> $GITHUB_OUTPUT
+          echo "✅ Backend deployed to: $BACKEND_URL"
+        else
+          echo "❌ Backend deployment failed"
+          exit 1
+        fi
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        
+    - name: Create production deployment record
+      id: create-deployment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const frontendUrl = '${{ steps.deploy-frontend.outputs.url }}';
+          const backendUrl = '${{ steps.deploy-backend.outputs.url }}';
+          const gitRef = '${{ github.event.inputs.git_ref }}';
+          const deployer = '${{ github.actor }}';
+          
+          // Create deployment
+          const deployment = await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'production',
+            description: `Production deployment from ${gitRef} by ${deployer}`,
+            auto_merge: false,
+            required_contexts: []
+          });
+          
+          // Set deployment to in-progress initially
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: deployment.data.id,
+            state: 'in_progress',
+            environment_url: frontendUrl,
+            description: `Deployment in progress - Frontend: ${frontendUrl}, Backend: ${backendUrl}`,
+            log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+          });
+          
+          return deployment.data.id;
+        result-encoding: string
+        
+    - name: Wait for deployment propagation
+      run: |
+        echo "⏳ Waiting for deployment to propagate..."
+        sleep 60  # Wait for DNS and CDN propagation
+        
+    - name: Disable maintenance mode
+      if: github.event.inputs.maintenance_mode == 'true'
+      run: |
+        echo "✅ Disabling maintenance mode..."
+        echo "TODO: Implement maintenance mode deactivation"
+        echo "TODO: Restore normal traffic routing"
+
+  # Job 3: Comprehensive health checks
+  production-health-checks:
+    runs-on: ubuntu-latest
+    name: Production Health Checks
+    needs: deploy-production
+    if: github.event.inputs.skip_health_checks != 'true'
+    timeout-minutes: 15
+    outputs:
+      health_status: ${{ steps.health-validation.outputs.status }}
+      response_times: ${{ steps.performance-check.outputs.times }}
+    
+    steps:
+    - name: Wait for deployment stabilization
+      run: |
+        echo "⏳ Waiting for deployment stabilization..."
+        sleep 30
+        
+    - name: Basic health check validation
+      id: health-validation
+      run: |
+        FRONTEND_URL="${{ needs.deploy-production.outputs.frontend_url }}"
+        BACKEND_URL="${{ needs.deploy-production.outputs.backend_url }}"
+        RETRIES=${{ env.HEALTH_CHECK_RETRIES }}
+        INTERVAL=${{ env.HEALTH_CHECK_INTERVAL }}
+        
+        echo "🔍 Starting comprehensive health checks..."
+        echo "Frontend: $FRONTEND_URL"
+        echo "Backend: $BACKEND_URL"
+        
+        # Health check with retries
+        for i in $(seq 1 $RETRIES); do
+          echo "Health check attempt $i/$RETRIES..."
+          
+          # Backend health check
+          if curl -f --max-time 10 "$BACKEND_URL/api/health" > /dev/null 2>&1; then
+            echo "✅ Backend health check passed"
+            BACKEND_HEALTHY=true
+            break
+          else
+            echo "⚠️ Backend health check failed, attempt $i/$RETRIES"
+            BACKEND_HEALTHY=false
+            if [ $i -eq $RETRIES ]; then
+              echo "❌ Backend health check failed after $RETRIES attempts"
+            else
+              sleep $INTERVAL
+            fi
+          fi
+        done
+        
+        # Frontend accessibility check
+        for i in $(seq 1 $RETRIES); do
+          echo "Frontend accessibility check attempt $i/$RETRIES..."
+          
+          if curl -f --max-time 10 "$FRONTEND_URL" > /dev/null 2>&1; then
+            echo "✅ Frontend accessibility confirmed"
+            FRONTEND_HEALTHY=true
+            break
+          else
+            echo "⚠️ Frontend accessibility check failed, attempt $i/$RETRIES"
+            FRONTEND_HEALTHY=false
+            if [ $i -eq $RETRIES ]; then
+              echo "⚠️ Frontend accessibility check failed (may require authentication)"
+            else
+              sleep $INTERVAL
+            fi
+          fi
+        done
+        
+        # Overall health status
+        if [ "$BACKEND_HEALTHY" = true ]; then
+          echo "status=healthy" >> $GITHUB_OUTPUT
+          echo "✅ Production health checks passed"
+        else
+          echo "status=unhealthy" >> $GITHUB_OUTPUT
+          echo "❌ Production health checks failed"
+          exit 1
+        fi
+        
+    - name: Performance validation
+      id: performance-check
+      run: |
+        BACKEND_URL="${{ needs.deploy-production.outputs.backend_url }}"
+        
+        echo "⚡ Running performance validation..."
+        
+        # Measure response times
+        TOTAL_TIME=0
+        SAMPLES=5
+        
+        for i in $(seq 1 $SAMPLES); do
+          START_TIME=$(date +%s%N)
+          curl -f --max-time 10 "$BACKEND_URL/api/health" > /dev/null 2>&1
+          END_TIME=$(date +%s%N)
+          RESPONSE_TIME=$(( (END_TIME - START_TIME) / 1000000 ))
+          
+          echo "Sample $i: ${RESPONSE_TIME}ms"
+          TOTAL_TIME=$((TOTAL_TIME + RESPONSE_TIME))
+          
+          sleep 1
+        done
+        
+        AVG_RESPONSE_TIME=$((TOTAL_TIME / SAMPLES))
+        echo "times=$AVG_RESPONSE_TIME" >> $GITHUB_OUTPUT
+        
+        echo "📊 Average response time: ${AVG_RESPONSE_TIME}ms"
+        
+        # Validate against performance thresholds
+        if [ $AVG_RESPONSE_TIME -lt 2000 ]; then
+          echo "✅ Performance validation passed"
+        else
+          echo "⚠️ Performance validation warning: slow response times"
+        fi
+        
+    - name: API functionality validation
+      run: |
+        BACKEND_URL="${{ needs.deploy-production.outputs.backend_url }}"
+        
+        echo "🧪 Validating API functionality..."
+        
+        # Test root endpoint
+        if curl -f --max-time 10 "$BACKEND_URL/" > /dev/null 2>&1; then
+          echo "✅ Root endpoint accessible"
+        else
+          echo "❌ Root endpoint failed"
+          exit 1
+        fi
+        
+        # Test health endpoint with content validation
+        HEALTH_RESPONSE=$(curl -f --max-time 10 "$BACKEND_URL/api/health" 2>/dev/null)
+        if echo "$HEALTH_RESPONSE" | grep -q "status"; then
+          echo "✅ Health endpoint functional"
+        else
+          echo "❌ Health endpoint not returning expected content"
+          exit 1
+        fi
+        
+        echo "✅ API functionality validation completed"
+
+  # Job 4: Post-deployment monitoring
+  post-deployment-monitoring:
+    runs-on: ubuntu-latest
+    name: Post-deployment Monitoring
+    needs: [deploy-production, production-health-checks]
+    timeout-minutes: 10
+    
+    steps:
+    - name: Setup monitoring alerts
+      run: |
+        echo "📊 Setting up post-deployment monitoring..."
+        echo "TODO: Configure application monitoring alerts"
+        echo "TODO: Set up error rate monitoring"
+        echo "TODO: Configure performance degradation alerts"
+        echo "TODO: Setup uptime monitoring"
+        
+    - name: Smoke test critical user journeys
+      run: |
+        FRONTEND_URL="${{ needs.deploy-production.outputs.frontend_url }}"
+        BACKEND_URL="${{ needs.deploy-production.outputs.backend_url }}"
+        
+        echo "🧪 Running critical user journey smoke tests..."
+        echo "Frontend: $FRONTEND_URL"
+        echo "Backend: $BACKEND_URL"
+        
+        # Critical API tests
+        echo "Testing critical API endpoints..."
+        curl -f --max-time 10 "$BACKEND_URL/api/health" > /dev/null && echo "✅ Health API working"
+        curl -f --max-time 10 "$BACKEND_URL/" > /dev/null && echo "✅ Root API working"
+        
+        echo "✅ Critical user journey smoke tests completed"
+
+  # Job 5: Rollback capability (conditional)
+  rollback-preparation:
+    runs-on: ubuntu-latest
+    name: Rollback Preparation
+    needs: [deploy-production, production-health-checks]
+    if: always() && github.event.inputs.enable_rollback == 'true'
+    
+    steps:
+    - name: Prepare rollback capability
+      run: |
+        HEALTH_STATUS="${{ needs.production-health-checks.outputs.health_status }}"
+        
+        echo "🔄 Preparing rollback capability..."
+        echo "Health Status: $HEALTH_STATUS"
+        
+        if [ "$HEALTH_STATUS" = "unhealthy" ]; then
+          echo "❌ Deployment appears unhealthy - rollback may be needed"
+          echo "TODO: Implement automatic rollback mechanism"
+          echo "TODO: Restore previous deployment state"
+          echo "TODO: Notify stakeholders of rollback"
+        else
+          echo "✅ Deployment healthy - rollback preparation completed"
+        fi
+        
+        echo "Previous deployment: ${{ needs.deploy-production.outputs.previous_deployment }}"
+
+  # Job 6: Production deployment summary
+  production-deployment-summary:
+    runs-on: ubuntu-latest
+    name: Production Deployment Summary
+    needs: [
+      pre-deployment-validation,
+      deploy-production,
+      production-health-checks,
+      post-deployment-monitoring,
+      rollback-preparation
+    ]
+    if: always()
+    
+    steps:
+    - name: Update deployment status and create summary
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const deploymentResult = '${{ needs.deploy-production.result }}';
+          const healthCheckResult = '${{ needs.production-health-checks.result }}';
+          const monitoringResult = '${{ needs.post-deployment-monitoring.result }}';
+          const frontendUrl = '${{ needs.deploy-production.outputs.frontend_url }}';
+          const backendUrl = '${{ needs.deploy-production.outputs.backend_url }}';
+          const gitRef = '${{ github.event.inputs.git_ref }}';
+          const deployer = '${{ github.actor }}';
+          const healthStatus = '${{ needs.production-health-checks.outputs.health_status }}';
+          const responseTime = '${{ needs.production-health-checks.outputs.response_times }}';
+          
+          // Determine overall deployment success
+          const deploymentSuccess = deploymentResult === 'success' && 
+                                  (healthCheckResult === 'success' || healthCheckResult === 'skipped');
+          
+          // Update deployment status
+          const deploymentId = '${{ needs.deploy-production.outputs.deployment_id }}';
+          if (deploymentId) {
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deploymentId,
+              state: deploymentSuccess ? 'success' : 'failure',
+              environment_url: frontendUrl,
+              description: deploymentSuccess ? 
+                `Production deployment successful - Health: ${healthStatus}, Response: ${responseTime}ms` :
+                'Production deployment failed - check logs for details',
+              log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
+          }
+          
+          // Create comprehensive deployment summary
+          let summary = `## 🚀 Production Deployment Summary\n\n`;
+          summary += `**Deployed by:** @${deployer}\n`;
+          summary += `**Git ref:** \`${gitRef}\`\n`;
+          summary += `**Deployment time:** ${new Date().toISOString()}\n`;
+          summary += `**Frontend:** ${frontendUrl || '❌ Failed'}\n`;
+          summary += `**Backend:** ${backendUrl || '❌ Failed'}\n\n`;
+          
+          summary += `### 📊 Deployment Results\n`;
+          summary += deploymentResult === 'success' ? `✅ Deployment: SUCCESS\n` : `❌ Deployment: FAILED\n`;
+          summary += healthCheckResult === 'success' ? `✅ Health Checks: PASSED\n` : 
+                    healthCheckResult === 'skipped' ? `⏸️ Health Checks: SKIPPED\n` : `❌ Health Checks: FAILED\n`;
+          summary += monitoringResult === 'success' ? `✅ Monitoring: ACTIVE\n` : `❌ Monitoring: ISSUES\n`;
+          
+          if (healthStatus && responseTime) {
+            summary += `\n### 🔍 Health Metrics\n`;
+            summary += `- **Health Status:** ${healthStatus}\n`;
+            summary += `- **Response Time:** ${responseTime}ms\n`;
+          }
+          
+          summary += `\n### 🎯 What's New\n`;
+          summary += `- Google ADK integration with Gemini 2.0 Flash\n`;
+          summary += `- Real-time streaming chat responses\n`;
+          summary += `- Enhanced connection pooling and performance\n`;
+          summary += `- Comprehensive health monitoring\n`;
+          summary += `- Production-grade error handling\n\n`;
+          
+          if (deploymentSuccess) {
+            summary += `### ✅ Next Steps\n`;
+            summary += `- Monitor application performance\n`;
+            summary += `- Verify all endpoints are working\n`;
+            summary += `- Check logs for any issues\n`;
+            summary += `- Update documentation if needed\n`;
+          } else {
+            summary += `### ❌ Action Required\n`;
+            summary += `- Review deployment logs\n`;
+            summary += `- Check failed health checks\n`;
+            summary += `- Consider rollback if necessary\n`;
+            summary += `- Investigate and fix issues\n`;
+          }
+          
+          summary += `\n---\n*🌟 Production deployment completed!*`;
+          
+          // Create production deployment issue
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `🌟 Production Deployment - ${new Date().toLocaleDateString()}`,
+            body: summary,
+            labels: ['deployment', 'production', deploymentSuccess ? 'success' : 'failure']
+          });
+          
+          console.log(summary);

@@ -2,7 +2,11 @@ name: Preview Deploy to Vercel
 
 on:
   push:
-    branches: [ develop ]
+    branches: 
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
     inputs:
       environment:

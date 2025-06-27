@@ -2,7 +2,11 @@ name: Staging Deployment with Comprehensive Testing
 
 on:
   push:
-    branches: [ develop ]
+    branches: 
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
     inputs:
       run_load_tests:

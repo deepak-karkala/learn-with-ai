@@ -1,6 +1,7 @@
-import uvicorn
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
+
+import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         # Log startup error but don't crash the app
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to initialize ADK service: {e}")
         adk_service = None
@@ -120,10 +122,7 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
 
         # Check if ADK service is available
         if adk_service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="ADK service is not available"
-            )
+            raise HTTPException(status_code=503, detail="ADK service is not available")
 
         # Get response from ADK service
         response = await adk_service.chat(request)
@@ -163,10 +162,7 @@ async def get_session_info(user_id: str, session_id: str) -> dict:
     """
     try:
         if adk_service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="ADK service is not available"
-            )
+            raise HTTPException(status_code=503, detail="ADK service is not available")
         session_info = adk_service.get_session_info(user_id, session_id)
         return session_info
     except Exception as e:

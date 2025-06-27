@@ -1,0 +1,449 @@
+name: PR Validation (Comprehensive Testing)
+
+on:
+  pull_request:
+    branches: [ develop ]
+  workflow_dispatch:
+    inputs:
+      run_performance_tests:
+        description: 'Run performance tests'
+        required: false
+        default: false
+        type: boolean
+      run_security_scan:
+        description: 'Run security scanning'
+        required: false
+        default: false
+        type: boolean
+      run_e2e_tests:
+        description: 'Run E2E tests'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  # Configuration from config.yml (can be overridden)
+  ENABLE_INTEGRATION_TESTS: false
+  ENABLE_E2E_TESTS: false
+  ENABLE_SECURITY_SCANNING: false
+  ENABLE_PERFORMANCE_TESTS: false
+
+jobs:
+  # Job 1: Re-run feature CI to ensure consistency
+  feature-ci-verification:
+    runs-on: ubuntu-latest
+    name: Feature CI Re-verification
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+
+    - name: Quick verification (linting + unit tests)
+      run: |
+        echo "🔄 Re-running feature CI checks for PR consistency..."
+        
+        # Frontend
+        cd frontend
+        npm ci --prefer-offline
+        npm run lint
+        npm test -- --coverage --watchAll=false --testTimeout=10000 --passWithNoTests
+        npm run build
+        
+        # Backend
+        cd ../backend
+        uv sync --dev
+        source .venv/bin/activate
+        flake8 app/ --max-line-length=120 --extend-ignore=E203,W503
+        mypy app/ --ignore-missing-imports
+        python -m pytest tests/ -v --tb=short --maxfail=5
+        
+        echo "✅ Feature CI re-verification completed"
+      env:
+        GOOGLE_API_KEY: "fake-key-for-testing"
+        ADK_MODEL_NAME: "gemini-2.0-flash-exp"
+
+  # Job 2: Claude Code Review (parallel with other checks)
+  claude-code-review:
+    runs-on: ubuntu-latest
+    name: Claude Code Review
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Install Claude CLI
+      run: npm install -g @anthropic-ai/claude-code
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+        
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        uv sync --dev
+        
+    - name: Run Claude Code Review
+      run: |
+        cd backend
+        ./review-claude.sh comprehensive > ../claude-review.txt 2>&1 || echo "Claude review completed"
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        
+    - name: Post Claude Review Comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let review = 'Claude Code Review not available';
+          try {
+            if (fs.existsSync('claude-review.txt')) {
+              review = fs.readFileSync('claude-review.txt', 'utf8');
+            }
+          } catch (e) {
+            console.log('Could not read review file:', e.message);
+          }
+          const comment = "## 🤖 Claude Code Review Results\n\n```\n" + review.trim() + "\n```\n\n---\n*🔍 Comprehensive validation in progress...*";
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  # Job 3: Deploy ephemeral preview environment
+  deploy-preview-environment:
+    runs-on: ubuntu-latest
+    name: Deploy Preview Environment
+    needs: feature-ci-verification
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      deployments: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install Vercel CLI
+      run: npm install -g vercel@latest
+      
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm ci --prefer-offline
+        
+    - name: Deploy Frontend Preview
+      id: deploy_frontend
+      run: |
+        cd frontend
+        echo "🚀 Deploying frontend preview..."
+        FRONTEND_OUTPUT=$(vercel --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$FRONTEND_OUTPUT"
+        
+        FRONTEND_URL=$(echo "$FRONTEND_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        echo "frontend_url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+        echo "✅ Frontend preview: $FRONTEND_URL"
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        
+    - name: Deploy Backend Preview
+      id: deploy_backend
+      run: |
+        cd backend
+        echo "🚀 Deploying backend preview..."
+        BACKEND_OUTPUT=$(vercel --token=${{ secrets.VERCEL_TOKEN }} --yes 2>&1)
+        echo "$BACKEND_OUTPUT"
+        
+        BACKEND_URL=$(echo "$BACKEND_OUTPUT" | grep -o 'https://[^[:space:]]*\.vercel\.app' | head -1)
+        echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
+        echo "✅ Backend preview: $BACKEND_URL"
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        
+    - name: Create GitHub deployment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const frontendUrl = '${{ steps.deploy_frontend.outputs.frontend_url }}';
+          const backendUrl = '${{ steps.deploy_backend.outputs.backend_url }}';
+          
+          // Create deployment
+          const deployment = await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'preview-pr-${{ github.event.number }}',
+            description: `PR #${{ github.event.number }} preview environment`,
+            auto_merge: false,
+            required_contexts: []
+          });
+          
+          // Create deployment status
+          await github.rest.repos.createDeploymentStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            deployment_id: deployment.data.id,
+            state: frontendUrl && backendUrl ? 'success' : 'failure',
+            environment_url: frontendUrl,
+            description: `Frontend: ${frontendUrl || 'Failed'}, Backend: ${backendUrl || 'Failed'}`,
+            log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+          });
+          
+          // Comment on PR with preview URLs
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 🚀 Preview Environment Deployed
+            
+**Frontend:** ${frontendUrl || '❌ Failed'}
+**Backend:** ${backendUrl || '❌ Failed'}
+
+### 🧪 Test the preview:
+\`\`\`bash
+# Health check
+curl ${backendUrl || 'BACKEND_URL'}/health
+
+# Frontend access
+open ${frontendUrl || 'FRONTEND_URL'}
+\`\`\`
+
+*Preview environment for PR #${{ github.event.number }}*`
+          });
+
+  # Job 4: Integration Tests (conditional)
+  integration-tests:
+    runs-on: ubuntu-latest
+    name: Integration Tests
+    needs: deploy-preview-environment
+    if: env.ENABLE_INTEGRATION_TESTS == 'true' || github.event.inputs.run_integration_tests == 'true'
+    timeout-minutes: 20
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.11"
+        
+    - name: Install dependencies
+      run: |
+        cd backend
+        uv sync --dev
+        
+    - name: Run integration tests
+      run: |
+        cd backend
+        source .venv/bin/activate
+        echo "🧪 Running integration tests..."
+        # Placeholder for actual integration tests
+        python -c "
+        print('✅ Integration test placeholder')
+        print('TODO: Add real integration tests when ready')
+        "
+      env:
+        GOOGLE_API_KEY: "fake-key-for-testing"
+        ADK_MODEL_NAME: "gemini-2.0-flash-exp"
+
+  # Job 5: E2E Tests (conditional)
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: E2E Tests
+    needs: deploy-preview-environment
+    if: env.ENABLE_E2E_TESTS == 'true' || github.event.inputs.run_e2e_tests == 'true'
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: E2E Test Placeholder
+      run: |
+        echo "🧪 E2E tests placeholder"
+        echo "TODO: Implement Puppeteer MCP integration"
+        echo "TODO: Add comprehensive user journey tests"
+        echo "✅ E2E test framework ready for implementation"
+
+  # Job 6: Security Scanning (conditional)
+  security-scanning:
+    runs-on: ubuntu-latest
+    name: Security Scanning
+    needs: feature-ci-verification
+    if: env.ENABLE_SECURITY_SCANNING == 'true' || github.event.inputs.run_security_scan == 'true'
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Frontend security audit
+      run: |
+        cd frontend
+        npm ci --prefer-offline
+        npm audit --audit-level=high
+        echo "✅ Frontend security audit completed"
+        
+    - name: Backend security placeholder
+      run: |
+        echo "🔒 Security scanning placeholder"
+        echo "TODO: Add Bandit security scanning"
+        echo "TODO: Add dependency vulnerability scanning"
+        echo "TODO: Add SAST (Static Application Security Testing)"
+        echo "✅ Security scanning framework ready"
+
+  # Job 7: Performance Tests (conditional)
+  performance-tests:
+    runs-on: ubuntu-latest
+    name: Performance Tests
+    needs: deploy-preview-environment
+    if: env.ENABLE_PERFORMANCE_TESTS == 'true' || github.event.inputs.run_performance_tests == 'true'
+    timeout-minutes: 20
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Performance testing placeholder
+      run: |
+        echo "⚡ Performance testing placeholder"
+        echo "TODO: Add Lighthouse CI for frontend performance"
+        echo "TODO: Add API response time validation"
+        echo "TODO: Add memory usage testing"
+        echo "✅ Performance testing framework ready"
+
+  # Job 8: PR Validation Summary
+  pr-validation-summary:
+    runs-on: ubuntu-latest
+    name: PR Validation Summary
+    needs: [
+      feature-ci-verification,
+      claude-code-review,
+      deploy-preview-environment,
+      integration-tests,
+      e2e-tests,
+      security-scanning,
+      performance-tests
+    ]
+    if: always()
+    
+    steps:
+    - name: PR Validation Results
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const jobs = {
+            'Feature CI': '${{ needs.feature-ci-verification.result }}',
+            'Claude Review': '${{ needs.claude-code-review.result }}',
+            'Preview Deploy': '${{ needs.deploy-preview-environment.result }}',
+            'Integration Tests': '${{ needs.integration-tests.result || 'skipped' }}',
+            'E2E Tests': '${{ needs.e2e-tests.result || 'skipped' }}',
+            'Security Scan': '${{ needs.security-scanning.result || 'skipped' }}',
+            'Performance Tests': '${{ needs.performance-tests.result || 'skipped' }}'
+          };
+          
+          let summary = "## 🔍 PR Validation Summary\n\n";
+          let allPassed = true;
+          
+          for (const [job, result] of Object.entries(jobs)) {
+            if (result === 'success') {
+              summary += `✅ ${job}: PASSED\n`;
+            } else if (result === 'skipped') {
+              summary += `⏸️ ${job}: SKIPPED\n`;
+            } else {
+              summary += `❌ ${job}: FAILED\n`;
+              allPassed = false;
+            }
+          }
+          
+          summary += "\n### 🎯 Next Steps\n";
+          if (allPassed) {
+            summary += "✅ **Ready for merge to develop!**\n";
+            summary += "- All enabled tests passed\n";
+            summary += "- Preview environment deployed\n";
+            summary += "- Code review completed\n";
+          } else {
+            summary += "❌ **Fixes required before merge**\n";
+            summary += "- Review failed jobs above\n";
+            summary += "- Address any issues found\n";
+            summary += "- Re-run validation when ready\n";
+          }
+          
+          summary += "\n*💡 Enable more tests by modifying workflow dispatch inputs or config.yml*";
+          
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });

@@ -1,0 +1,54 @@
+# DISABLED - Replaced by staging-deploy.yml (automatic on develop push)
+# name: Manual Staging Deploy
+#
+# on:
+#   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to deploy to staging'
+        required: true
+        type: string
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy PR to Staging
+    
+    steps:
+    - name: Checkout PR code
+      uses: actions/checkout@v4
+      with:
+        ref: refs/pull/${{ github.event.inputs.pr_number }}/head
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm ci
+        npm run build
+
+    - name: Deploy to Vercel Staging
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.ORG_ID }}
+        vercel-project-id: ${{ secrets.PROJECT_ID }}
+        working-directory: ./
+
+    - name: Comment deployment success
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          await github.rest.issues.createComment({
+            issue_number: ${{ github.event.inputs.pr_number }},
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 **Staging deployment complete!** Please verify manually before proceeding to production.'
+          });

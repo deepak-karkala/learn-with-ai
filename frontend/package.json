@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "review:claude": "claude -p 'You are a code reviewer for a NextJS/React/TypeScript project. Review the git diff vs main branch and report any issues related to: 1) TypeScript errors, 2) React best practices, 3) Performance issues, 4) Security vulnerabilities, 5) Code style inconsistencies. Format: filename:line - issue description. Be concise and actionable.'",
+    "review:claude:security": "claude -p 'You are a security-focused code reviewer. Analyze the git diff vs main for potential security issues: XSS, CSRF, data exposure, authentication bypasses, input validation. Report filename:line - security issue. Only report actual security concerns.'",
+    "review:claude:performance": "claude -p 'You are a performance-focused code reviewer for React/NextJS. Analyze git diff vs main for: unnecessary re-renders, bundle size issues, inefficient data fetching, memory leaks. Report filename:line - performance issue.'"
   },
   "dependencies": {
     "next": "^14.0.0",
@@ -17,12 +20,12 @@
     "typescript": "^5.0.0",
     "@types/react": "^18.0.0",
     "@types/node": "^20.0.0",
-    "@types/react-dom": "^18.0.0"
-  },
-  "devDependencies": {
+    "@types/react-dom": "^18.0.0",
     "tailwindcss": "^3.0.0",
     "postcss": "^8.0.0",
-    "autoprefixer": "^10.0.0",
+    "autoprefixer": "^10.0.0"
+  },
+  "devDependencies": {
     "eslint": "^8.0.0",
     "eslint-config-next": "^14.0.0",
     "@testing-library/react": "^14.0.0",

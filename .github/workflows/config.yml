@@ -1,0 +1,72 @@
+# CI/CD Configuration File
+# Toggle different test suites on/off for development speed vs comprehensive testing
+
+name: Workflow Configuration
+
+# Test Suite Enable/Disable Flags (modify these for development speed)
+on:
+  workflow_call:
+    outputs:
+      # Fast feedback loop tests (always enabled)
+      enable_linting:
+        value: "true"
+      enable_unit_tests:
+        value: "true"
+      enable_type_checking:
+        value: "true"
+      
+      # Comprehensive testing (can be disabled for speed)
+      enable_integration_tests:
+        value: "false"  # Set to true when ready
+      enable_e2e_tests:
+        value: "false"  # Set to true when ready
+      enable_security_scanning:
+        value: "false"  # Set to true when ready
+      enable_performance_tests:
+        value: "false"  # Set to true when ready
+      enable_load_testing:
+        value: "false"  # Set to true when ready
+      enable_visual_regression:
+        value: "false"  # Set to true when ready
+      
+      # Deployment toggles
+      enable_preview_deployments:
+        value: "true"
+      enable_staging_deployments:
+        value: "true"
+      enable_production_deployments:
+        value: "false"  # Manual control for production
+      
+      # Database and infrastructure
+      enable_db_migration_tests:
+        value: "false"  # Set to true when DB is configured
+      enable_infrastructure_tests:
+        value: "false"  # Set to true for infrastructure validation
+      
+      # Code quality and documentation
+      enable_code_coverage:
+        value: "true"
+      enable_dependency_check:
+        value: "false"  # Set to true for security audits
+      enable_documentation_check:
+        value: "false"  # Set to true for doc generation
+      
+      # Notification and reporting
+      enable_slack_notifications:
+        value: "false"  # Set to true when Slack is configured
+      enable_test_reporting:
+        value: "true"
+      
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configuration Summary
+        run: |
+          echo "## 🔧 CI/CD Configuration Summary"
+          echo "Fast Feedback Tests: ✅ Enabled"
+          echo "Comprehensive Tests: ⏸️  Mostly Disabled (for development speed)"
+          echo "Preview Deployments: ✅ Enabled"
+          echo "Production Safety: 🔒 Manual control required"
+          echo ""
+          echo "💡 To enable more tests, modify .github/workflows/config.yml"

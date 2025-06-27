@@ -4,8 +4,8 @@
 # on:
 #   pull_request:
 #     branches: [ develop ]
-
-jobs:
+#
+# jobs:
   tests-and-review:
     runs-on: ubuntu-latest
     name: Tests and Code Review

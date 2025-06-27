@@ -3,7 +3,7 @@
 #
 # on:
 #   workflow_dispatch:
-    inputs:
+#     inputs:
       pr_number:
         description: 'PR number to deploy to staging'
         required: true

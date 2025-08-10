@@ -14,23 +14,32 @@
     "review:claude:performance": "claude -p 'You are a performance-focused code reviewer for React/NextJS. Analyze git diff vs main for: unnecessary re-renders, bundle size issues, inefficient data fetching, memory leaks. Report filename:line - performance issue.'"
   },
   "dependencies": {
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-scroll-area": "^1.2.9",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "autoprefixer": "^10.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.539.0",
     "next": "^14.0.0",
+    "postcss": "^8.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "typescript": "^5.0.0",
-    "@types/react": "^18.0.0",
-    "@types/node": "^20.0.0",
-    "@types/react-dom": "^18.0.0",
+    "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.0.0",
-    "postcss": "^8.0.0",
-    "autoprefixer": "^10.0.0"
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.0.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@types/jest": "^29.0.0",
     "eslint": "^8.0.0",
     "eslint-config-next": "^14.0.0",
-    "@testing-library/react": "^14.0.0",
-    "@testing-library/jest-dom": "^6.0.0",
-    "@types/jest": "^29.0.0",
     "jest": "^29.0.0",
     "jest-environment-jsdom": "^29.0.0"
   }

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center p-8 space-y-8">
@@ -9,9 +11,12 @@ export default function Home() {
           Interactive AI-powered platform for learning system design
         </p>
         <div className="mb-8">
-          <p className="text-sm text-gray-500">
-            🚧 Under Development - Coming Soon
-          </p>
+          <Link
+            href="/chat"
+            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+          >
+            🚀 Start Learning Now
+          </Link>
         </div>
       </div>
 
@@ -63,6 +68,32 @@ export default function Home() {
           <p className="m-0 max-w-[30ch] text-sm opacity-50">
             Generate architecture diagrams from conversation context.
           </p>
+        </div>
+      </div>
+
+      {/* Quick Start Section */}
+      <div className="w-full max-w-4xl text-center">
+        <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+          <h2 className="text-2xl font-semibold text-blue-900 mb-4">
+            Ready to Start Learning?
+          </h2>
+          <p className="text-blue-700 mb-6">
+            Jump into interactive conversations with our AI assistant and start mastering system design concepts today.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              href="/chat"
+              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            >
+              💬 Start Chatting
+            </Link>
+            <Link
+              href="/chat"
+              className="inline-flex items-center px-6 py-3 border border-blue-600 text-base font-medium rounded-md text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            >
+              📚 Learn More
+            </Link>
+          </div>
         </div>
       </div>
     </main>

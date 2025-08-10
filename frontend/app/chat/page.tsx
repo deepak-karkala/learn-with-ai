@@ -28,6 +28,11 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [isTyping, setIsTyping] = useState(false)
+    const [sessionId, setSessionId] = useState<string | null>(null)
+
+    const apiBase =
+        process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ||
+        'http://localhost:8000'
 
     // Mock authentication check
     useEffect(() => {
@@ -54,30 +59,40 @@ export default function ChatPage() {
         setError(null)
 
         try {
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            // Call backend chat API
+            const resp = await fetch(`${apiBase}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message,
+                    user_id: mockUser.email || 'web_user',
+                    session_id: sessionId || undefined,
+                }),
+            })
 
-            // Mock AI response
-            const aiResponse: Message = {
-                id: (Date.now() + 1).toString(),
-                content: `Thank you for your question about "${message}". This is a mock response that would normally come from the AI system design learning assistant. In a real implementation, this would provide detailed guidance, examples, and potentially assessment scores.`,
-                role: 'assistant',
-                timestamp: new Date(),
-                metadata: {
-                    topic: 'System Design',
-                    difficulty: 'intermediate',
-                    assessment: {
-                        requirements_analysis: Math.floor(Math.random() * 5) + 1,
-                        system_architecture: Math.floor(Math.random() * 5) + 1,
-                        technical_deep_dive: Math.floor(Math.random() * 5) + 1,
-                        scale_performance: Math.floor(Math.random() * 5) + 1,
-                        reliability_fault_tolerance: Math.floor(Math.random() * 5) + 1,
-                        communication_thought_process: Math.floor(Math.random() * 5) + 1
-                    }
-                }
+            if (!resp.ok) {
+                let errText = `Request failed (${resp.status})`
+                try {
+                    const errJson = await resp.json()
+                    errText = errJson?.detail || errJson?.message || errText
+                } catch (_) { }
+                throw new Error(errText)
             }
 
-            setMessages(prev => [...prev, aiResponse])
+            const data = await resp.json()
+            if (data?.session_id && data.session_id !== sessionId) {
+                setSessionId(data.session_id)
+            }
+
+            const assistantMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                content: data?.message || 'No response received.',
+                role: 'assistant',
+                timestamp: new Date(),
+            }
+            setMessages(prev => [...prev, assistantMessage])
         } catch (err) {
             setError('Failed to get AI response. Please try again.')
         } finally {

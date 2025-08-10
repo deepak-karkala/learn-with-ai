@@ -90,7 +90,7 @@ def get_settings() -> Settings:
     # In tests we want clean defaults; avoid inheriting external env noise
     import os
 
-    if os.getenv("PYTEST_CURRENT_TEST"):
+    if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("USE_REAL_ENV") != "true":
         # Construct settings without inheriting unrelated env vars
         return Settings.model_construct(
             google_genai_use_vertexai=False,

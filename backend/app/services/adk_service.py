@@ -256,7 +256,8 @@ You have access to the conversation history through the session state. Use this 
 
             # Pool is full, create temporary queue (not pooled)
             logger.debug(
-                f"Queue pool full ({len(self._queue_pool)}/{self._max_pool_size}), creating temporary LiveRequestQueue for session {session_id}"
+                f"Queue pool full ({len(self._queue_pool)}/{self._max_pool_size}), "
+                f"creating temporary LiveRequestQueue for session {session_id}"
             )
             return LiveRequestQueue()
 
@@ -434,7 +435,8 @@ You have access to the conversation history through the session state. Use this 
                                                 part.text
                                             )  # Concatenate all parts
                                             logger.debug(
-                                                f"Added response text part: {len(part.text)} chars, total: {len(response_text)} chars"
+                                                f"Added response text part: {len(part.text)} chars, "
+                                                f"total: {len(response_text)} chars"
                                             )
                                 else:
                                     logger.debug(

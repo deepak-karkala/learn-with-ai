@@ -2,9 +2,13 @@ name: Feature Branch CI (Fast Feedback)
 
 on:
   push:
-    branches-ignore: 
-      - main
-      - develop
+    branches: 
+      - 'feature/**'
+      - 'bugfix/**'
+      - 'hotfix/**'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 # Fail fast - stop on first failure to give immediate feedback

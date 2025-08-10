@@ -3,7 +3,7 @@
 #
 # on:
 #   workflow_dispatch:
-    inputs:
+#     inputs:
       confirm_production:
         description: 'Type "PRODUCTION" to confirm deployment'
         required: true

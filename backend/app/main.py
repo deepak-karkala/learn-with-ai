@@ -1,6 +1,7 @@
-import uvicorn
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
+
+import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +21,9 @@ adk_service: Optional[ADKService] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Handle application startup and shutdown for proper resource management"""
+    """Handle application startup and shutdown
+    for proper resource management
+    """
     global adk_service
 
     # Startup
@@ -30,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         # Log startup error but don't crash the app
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to initialize ADK service: {e}")
         adk_service = None
@@ -56,8 +60,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://frontend-hckhrw1r3-dkarkala01-gmailcoms-projects.vercel.app",
-        "https://your-app.vercel.app",
+        "https://frontend-lua5my5jr-dkarkala01-gmailcoms-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -122,7 +125,7 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
         if adk_service is None:
             raise HTTPException(
                 status_code=503,
-                detail="ADK service is not available"
+                detail="ADK service is not available",
             )
 
         # Get response from ADK service
@@ -131,19 +134,24 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
         # Log the response status
         if response.success:
             logger.info(
-                f"Successfully processed ADK chat for user {request.user_id}, "
-                f"session {response.session_id}"
+                "Successfully processed ADK chat for user %s, session %s",
+                request.user_id,
+                response.session_id,
             )
         else:
             logger.warning(
-                f"ADK service returned error for user {request.user_id}: {response.error}"
+                "ADK service returned error for user %s: %s",
+                request.user_id,
+                response.error,
             )
 
         return response
 
     except Exception as e:
         logger.error(
-            f"Unexpected error in ADK chat endpoint for user {request.user_id}: {str(e)}",
+            "Unexpected error in ADK chat endpoint for user %s: %s",
+            request.user_id,
+            str(e),
             exc_info=True,
         )
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -165,7 +173,7 @@ async def get_session_info(user_id: str, session_id: str) -> dict:
         if adk_service is None:
             raise HTTPException(
                 status_code=503,
-                detail="ADK service is not available"
+                detail="ADK service is not available",
             )
         session_info = adk_service.get_session_info(user_id, session_id)
         return session_info

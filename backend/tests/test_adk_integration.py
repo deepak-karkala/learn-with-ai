@@ -88,10 +88,11 @@ class TestADKIntegration:
             """
         )
         
-        # Create runner and session
-        runner = InMemoryRunner(agent=agent)
+        # Create runner and session - use consistent app_name
+        app_name = "adk_integration_test"
+        runner = InMemoryRunner(agent=agent, app_name=app_name)
         session = await runner.session_service.create_session(
-            app_name="adk_integration_test",
+            app_name=app_name,
             user_id="test_user_integration"
         )
         
@@ -114,7 +115,8 @@ class TestADKIntegration:
         # Collect response from events
         response_text = ""
         async for event in events:
-            if hasattr(event, "content") and event.content and event.content.parts:
+            if (hasattr(event, "content") and event.content and 
+                event.content.parts):
                 for part in event.content.parts:
                     if hasattr(part, "text") and part.text:
                         response_text += part.text
@@ -125,8 +127,10 @@ class TestADKIntegration:
         assert len(response_text) > 0
         
         # Verify the agent responded appropriately
-        # The response should contain some confirmation (we can't guarantee exact text due to LLM variability)
-        assert any(word in response_text.lower() for word in ['yes', 'working', 'adk', 'correct'])
+        # The response should contain some confirmation 
+        # (we can't guarantee exact text due to LLM variability)
+        assert any(word in response_text.lower() 
+                  for word in ['yes', 'working', 'adk', 'correct'])
 
     @pytest.mark.asyncio 
     async def test_adk_service_integration(self):
@@ -198,9 +202,11 @@ class TestADKIntegrationWithAPIKey:
             instruction="Respond briefly to confirm streaming works"
         )
         
-        runner = InMemoryRunner(agent=agent)
+        # Use consistent app_name for runner and session
+        app_name = "streaming_test"
+        runner = InMemoryRunner(agent=agent, app_name=app_name)
         session = await runner.session_service.create_session(
-            app_name="streaming_test",
+            app_name=app_name,
             user_id="stream_test_user"
         )
         

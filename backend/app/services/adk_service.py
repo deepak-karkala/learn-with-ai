@@ -31,6 +31,23 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+class SessionCreateRequest(BaseModel):
+    """Session creation request model"""
+
+    user_id: str
+    initial_state: Optional[Dict[str, Any]] = None
+
+
+class SessionCreateResponse(BaseModel):
+    """Session creation response model"""
+
+    session_id: str
+    user_id: str
+    state: Dict[str, Any]
+    success: bool
+    error: Optional[str] = None
+
+
 class ChatResponse(BaseModel):
     """Chat response model from ADK agent"""
 
@@ -57,6 +74,11 @@ class ADKService:
         self._pool_lock = asyncio.Lock()
         self._max_pool_size = settings.adk_max_connections
         self._sessions: WeakValueDictionary = WeakValueDictionary()
+        
+        # Session state management
+        self._session_states: Dict[str, Dict[str, Any]] = {}
+        self._session_creation_time: Dict[str, float] = {}
+        self._session_expiry_seconds = settings.adk_session_expiry_seconds
 
         # Timeout configuration for streaming responses (configurable)
         self._streaming_timeout = settings.adk_streaming_timeout
@@ -333,7 +355,162 @@ You have access to the conversation history through the session state. Use this 
             # Clear sessions (WeakValueDictionary will auto-cleanup)
             self._sessions.clear()
 
+        # Clean up session state management
+        self._session_states.clear()
+        self._session_creation_time.clear()
+
         logger.info("ADK service cleanup completed")
+
+    def _is_session_expired(self, session_id: str) -> bool:
+        """Check if a session has expired"""
+        if session_id not in self._session_creation_time:
+            return True
+        
+        creation_time = self._session_creation_time[session_id]
+        current_time = time.time()
+        elapsed_time = current_time - creation_time
+        
+        return elapsed_time > self._session_expiry_seconds
+
+    def _cleanup_expired_sessions(self) -> None:
+        """Clean up expired sessions"""
+        expired_sessions = [
+            session_id for session_id in list(self._session_creation_time.keys())
+            if self._is_session_expired(session_id)
+        ]
+        
+        for session_id in expired_sessions:
+            logger.debug(f"Cleaning up expired session: {session_id}")
+            self._session_creation_time.pop(session_id, None)
+            self._session_states.pop(session_id, None)
+
+    async def create_session(self, request: SessionCreateRequest) -> SessionCreateResponse:
+        """
+        Create a new session with initial state.
+        
+        Args:
+            request: Session creation request with user_id and initial_state
+            
+        Returns:
+            Session creation response with session_id and state
+        """
+        try:
+            # Clean up expired sessions periodically
+            self._cleanup_expired_sessions()
+            
+            # Generate session ID with consistent timestamp
+            creation_timestamp = time.time()
+            session_id = f"{request.user_id}_session_{int(creation_timestamp)}"
+            
+            # Get runner from pool
+            runner = await self._get_or_create_runner(request.user_id)
+            
+            # Initialize state with user preferences
+            initial_state = request.initial_state or {}
+            default_state = {
+                "skill_level": "intermediate",
+                "learning_progress": {},
+                "preferences": {
+                    "difficulty": "medium",
+                    "focus_areas": []
+                }
+            }
+            # Merge user-provided state with defaults
+            merged_state = {**default_state, **initial_state}
+            
+            # Create ADK session with state
+            await runner.session_service.create_session(
+                app_name=self.app_name,
+                user_id=request.user_id,
+                state=merged_state,
+                session_id=session_id,
+            )
+            
+            # Store session state and creation time for management (using same timestamp)
+            self._session_states[session_id] = merged_state
+            self._session_creation_time[session_id] = creation_timestamp
+            
+            logger.info(f"Created session {session_id} for user {request.user_id} with state: {list(merged_state.keys())}")
+            
+            return SessionCreateResponse(
+                session_id=session_id,
+                user_id=request.user_id,
+                state=merged_state,
+                success=True
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to create session for user {request.user_id}: {str(e)}", exc_info=True)
+            return SessionCreateResponse(
+                session_id="",
+                user_id=request.user_id,
+                state={},
+                success=False,
+                error=str(e)
+            )
+
+    def get_user_sessions(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get all sessions for a user.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            User sessions information
+        """
+        try:
+            # Clean up expired sessions first
+            self._cleanup_expired_sessions()
+            
+            # Find sessions for this user
+            user_sessions = []
+            for session_id, creation_time in self._session_creation_time.items():
+                if session_id.startswith(f"{user_id}_session_"):
+                    session_state = self._session_states.get(session_id, {})
+                    user_sessions.append({
+                        "session_id": session_id,
+                        "created_at": creation_time,
+                        "state": session_state,
+                        "expired": self._is_session_expired(session_id)
+                    })
+            
+            return {
+                "user_id": user_id,
+                "sessions": user_sessions,
+                "total_sessions": len(user_sessions),
+                "active_sessions": len([s for s in user_sessions if not s["expired"]])
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get sessions for user {user_id}: {str(e)}")
+            return {
+                "user_id": user_id,
+                "sessions": [],
+                "error": str(e)
+            }
+
+    def _get_most_recent_active_session(self, user_id: str) -> Optional[str]:
+        """
+        Get the most recent active session for a user.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Most recent active session_id or None if no active sessions
+        """
+        user_sessions = []
+        for session_id, creation_time in self._session_creation_time.items():
+            if session_id.startswith(f"{user_id}_session_") and not self._is_session_expired(session_id):
+                user_sessions.append((session_id, creation_time))
+        
+        if not user_sessions:
+            return None
+        
+        # Sort by creation time and return the most recent
+        most_recent = max(user_sessions, key=lambda x: x[1])
+        return most_recent[0]
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         """
@@ -345,7 +522,23 @@ You have access to the conversation history through the session state. Use this 
         Returns:
             Chat response from the agent
         """
-        session_id = request.session_id or f"{request.user_id}_session"
+        # Clean up expired sessions first
+        self._cleanup_expired_sessions()
+        
+        # Determine session_id: use provided one, or find most recent active, or create new
+        if request.session_id:
+            session_id = request.session_id
+            logger.debug(f"Using provided session_id: {session_id}")
+        else:
+            # Try to find most recent active session for this user
+            session_id = self._get_most_recent_active_session(request.user_id)
+            if session_id:
+                logger.debug(f"Found most recent active session: {session_id}")
+            else:
+                # Create new session ID for new session
+                creation_timestamp = time.time()
+                session_id = f"{request.user_id}_session_{int(creation_timestamp)}"
+                logger.debug(f"Created new session_id: {session_id}")
 
         try:
             if not self.agent:
@@ -366,14 +559,33 @@ You have access to the conversation history through the session state. Use this 
             runner = await self._get_or_create_runner(request.user_id)
             logger.debug("Obtained runner from pool")
 
+            # Get or create session state with user preferences
+            if session_id in self._session_states and not self._is_session_expired(session_id):
+                # Use existing session state
+                session_state = self._session_states[session_id]
+                logger.debug(f"Using existing session state for {session_id}")
+            else:
+                # Create new session with default state
+                session_state = {
+                    "skill_level": "intermediate",
+                    "learning_progress": {},
+                    "preferences": {
+                        "difficulty": "medium",
+                        "focus_areas": []
+                    }
+                }
+                self._session_states[session_id] = session_state
+                self._session_creation_time[session_id] = time.time()
+                logger.debug(f"Created new session state for {session_id}")
+            
             # Create session using the runner's session service
             session = await runner.session_service.create_session(
                 app_name=self.app_name,
                 user_id=request.user_id,
-                state={},  # Initialize with empty state
+                state=session_state,
                 session_id=session_id,
             )
-            logger.info(f"Created session {session_id}")
+            logger.info(f"Created ADK session {session_id}")
 
             # Get reusable run configuration for better performance
             run_config = self._get_run_config()

@@ -6,7 +6,13 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.services.adk_service import ADKService, ChatRequest, ChatResponse
+from app.services.adk_service import (
+    ADKService, 
+    ChatRequest, 
+    ChatResponse,
+    SessionCreateRequest,
+    SessionCreateResponse
+)
 from app.services.config import settings, setup_logging
 
 # Load environment variables
@@ -155,6 +161,66 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
             exc_info=True,
         )
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/api/session/create")
+async def create_session(request: SessionCreateRequest) -> SessionCreateResponse:
+    """
+    Create a new session with initial state.
+    
+    Args:
+        request: Session creation request with user_id and initial_state
+        
+    Returns:
+        Session creation response with session_id and state
+    """
+    try:
+        if adk_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="ADK service is not available",
+            )
+        
+        response = await adk_service.create_session(request)
+        return response
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to create session: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create session: {str(e)}",
+        )
+
+
+@app.get("/api/session/{user_id}")
+async def get_user_sessions(user_id: str) -> dict:
+    """
+    Get all sessions for a user.
+    
+    Args:
+        user_id: User identifier
+        
+    Returns:
+        User sessions information
+    """
+    try:
+        if adk_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="ADK service is not available",
+            )
+        
+        sessions_info = adk_service.get_user_sessions(user_id)
+        return sessions_info
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to get user sessions: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get user sessions: {str(e)}",
+        )
 
 
 @app.get("/api/sessions/{user_id}/{session_id}")

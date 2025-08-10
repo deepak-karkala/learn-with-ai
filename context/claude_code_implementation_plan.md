@@ -1272,7 +1272,108 @@ def test_caching():
 
 ---
 
-#### **Issue #24: Comprehensive Testing Suite**
+#### **Issue #24: Persistent Session Storage with ADK Artifacts**
+**Epic**: Session Management  
+**Labels**: `backend`, `adk`, `persistence`, `session`, `p1-high`  
+**Milestone**: Phase 4 - Production  
+
+**Description:**
+Implement persistent session storage using ADK artifacts for long-term user continuity and production scalability.
+
+**Acceptance Criteria:**
+- [ ] ADK artifacts integration for session persistence
+- [ ] Session state backup to artifacts on session updates
+- [ ] Session restoration from artifacts on user return
+- [ ] Conversation history preservation across server restarts
+- [ ] Learning progress continuity after long user absences
+- [ ] Fallback mechanisms for corrupted or missing artifacts
+- [ ] Migration from in-memory to persistent storage
+- [ ] Performance optimization for artifact operations
+- [ ] Cleanup of old session artifacts
+
+**Testing:**
+```python
+def test_session_persistence():
+    # Create session with state
+    response = client.post("/api/session/create", json={
+        "user_id": "test_user",
+        "initial_state": {"skill_level": "advanced", "progress": {"completed": ["twitter"]}}
+    })
+    session_id = response.json()["session_id"]
+    
+    # Simulate server restart (clear in-memory storage)
+    service._session_states.clear()
+    service._session_creation_time.clear()
+    
+    # User returns after restart
+    chat_response = client.post("/api/chat", json={
+        "message": "Continue where we left off",
+        "user_id": "test_user",
+        "session_id": session_id
+    })
+    
+    # Verify session was restored from artifacts
+    assert chat_response.status_code == 200
+    assert "twitter" in chat_response.json()["context_used"]
+
+def test_long_term_continuity():
+    # Create session and let it expire (simulate 3 months gap)
+    session_id = create_test_session()
+    
+    # Mock very old timestamp (expired by time)
+    service._session_creation_time[session_id] = time.time() - (3 * 30 * 24 * 3600)
+    
+    # User returns after long absence
+    response = client.post("/api/chat", json={
+        "message": "I'm back! Can we continue?",
+        "user_id": "test_user",
+        "session_id": session_id
+    })
+    
+    # Should restore from artifacts despite expiry
+    assert response.status_code == 200
+    assert response.json()["session_restored"] == True
+
+def test_artifact_cleanup():
+    # Create multiple old sessions
+    old_sessions = []
+    for i in range(5):
+        session = create_test_session(f"user_{i}")
+        old_sessions.append(session)
+    
+    # Run cleanup
+    service.cleanup_old_session_artifacts(days_old=90)
+    
+    # Verify old artifacts are cleaned up
+    for session_id in old_sessions:
+        with pytest.raises(ArtifactNotFound):
+            service.get_session_from_artifacts(session_id)
+
+def test_migration_from_memory():
+    # Test migration of existing in-memory sessions to persistent storage
+    service._session_states["test_session"] = {"skill": "expert"}
+    service._session_creation_time["test_session"] = time.time()
+    
+    # Trigger migration
+    service.migrate_memory_sessions_to_artifacts()
+    
+    # Verify session is now in artifacts
+    restored_session = service.get_session_from_artifacts("test_session")
+    assert restored_session["skill"] == "expert"
+```
+
+**Definition of Done:**
+- Sessions persist across server restarts
+- Users can resume learning after months of absence
+- Conversation history and progress maintained
+- Performance impact of artifact operations minimal
+- Old artifacts are cleaned up automatically
+- Migration from in-memory storage successful
+- Fallback mechanisms handle edge cases
+
+---
+
+#### **Issue #25: Comprehensive Testing Suite**
 **Epic**: Testing  
 **Labels**: `testing`, `qa`, `automation`, `p1-high`  
 **Milestone**: Phase 4 - Production  

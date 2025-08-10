@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     adk_max_events: int = 100  # Maximum events to process per request
     adk_max_connections: int = 10  # Maximum connections in connection pool
     adk_connection_health_timeout: float = 300.0  # Connection health timeout in seconds
+    adk_session_expiry_seconds: float = 3600.0  # Session expiry time in seconds (1 hour)
 
     # Application Configuration
     debug: bool = False

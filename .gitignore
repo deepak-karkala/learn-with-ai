@@ -127,7 +127,7 @@ gcp-key.json
 !.env.example
 
 # Context folder (development planning documents)
-context/
+# context/
 
 # Deployment
 .vercel/

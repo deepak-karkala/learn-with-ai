@@ -3,6 +3,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://backend-n1qjcmkwf-dkarkala01-gmailcoms-projects.vercel.app/api/$1"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

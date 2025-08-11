@@ -169,7 +169,10 @@ class WhiteboardService:
                 suggestions=analysis['suggestions'],
                 confidence_score=analysis['confidence_score'],
                 status=analysis['status'],
-                created_at=analysis['created_at']
+                created_at=analysis['created_at'],
+                cost_estimate=analysis['cost_estimate'],
+                tokens_used=analysis['tokens_used'],
+                raw_analysis=analysis['raw_analysis']
             )
             
         except Exception as e:

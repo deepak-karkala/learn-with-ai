@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import field_validator, Field
 
 
 class Settings(BaseSettings):
@@ -30,18 +30,23 @@ class Settings(BaseSettings):
 
     # ADK Agent Configuration
     adk_model_name: str = "gemini-2.0-flash-exp"
-    
+
     # Multimodal Analysis Configuration
-    multimodal_model_name: str = "gemini-2.0-flash-exp"
+    multimodal_model_name: str = "gpt-4o"
     multimodal_analysis_timeout: float = 60.0
     multimodal_max_tokens: int = 4000
     multimodal_temperature: float = 0.1
-    
+
+    # OpenAI Configuration
+    openai_api_key: str = Field(
+        default="", description="OpenAI API key for multimodal analysis"
+    )
+
     # Cost Tracking Configuration
     enable_cost_tracking: bool = True
-    multimodal_cost_per_1k_tokens: float = 0.0025  # Gemini 2.0
-    multimodal_cost_per_image: float = 0.0025      # Per image analysis
-    
+    multimodal_cost_per_1k_tokens: float = 0.005  # GPT-4o pricing
+    multimodal_cost_per_image: float = 0.01  # Per image analysis
+
     # Timeout for streaming responses in seconds
     adk_streaming_timeout: float = 30.0
     # Maximum events to process per request
@@ -85,6 +90,7 @@ class Settings(BaseSettings):
         """Validate that required settings are present for ADK functionality"""
         # During pytest with synthetic settings, don't enforce external env
         import os
+
         if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("USE_REAL_ENV") != "true":
             return
         if not self.google_api_key and not self.google_genai_use_vertexai:
@@ -153,8 +159,7 @@ def setup_logging(settings: Settings) -> None:
         import sys
 
         msg = (
-            f"Warning: Invalid log level '{settings.log_level}', "
-            "defaulting to INFO"
+            f"Warning: Invalid log level '{settings.log_level}', " "defaulting to INFO"
         )
         print(msg, file=sys.stderr)
     else:

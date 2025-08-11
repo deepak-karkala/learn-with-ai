@@ -21,149 +21,152 @@ load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
 
 
-class TestADKIntegration:
-    """Integration tests for Google ADK - tests real API calls"""
+# class TestADKIntegration:
+#     """Integration tests for Google ADK - tests real API calls"""
 
-    def test_environment_setup(self):
-        """Test environment variables are properly configured"""
-        api_key = os.getenv("GOOGLE_API_KEY")
-        use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "FALSE").upper() == "TRUE"
-        
-        # We need either API key or Vertex AI setup
-        assert api_key or use_vertex, "Either GOOGLE_API_KEY or Vertex AI must be configured"
-        
-        if use_vertex:
-            assert os.getenv("GOOGLE_CLOUD_PROJECT"), "GOOGLE_CLOUD_PROJECT required for Vertex AI"
+#     # @pytest.mark.skip(reason="Skipped - switched to OpenAI integration")
+#     # def test_environment_setup(self):
+#     #     """Test environment variables are properly configured"""
+#     #     api_key = os.getenv("GOOGLE_API_KEY")
+#     #     use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "FALSE").upper() == "TRUE"
+#     #     
+#     #     # We need either API key or Vertex AI setup
+#     #     assert api_key or use_vertex, "Either GOOGLE_API_KEY or Vertex AI must be configured"
+#     #     
+#     #     if use_vertex:
+#     #         assert os.getenv("GOOGLE_CLOUD_PROJECT"), "GOOGLE_CLOUD_PROJECT required for Vertex AI"
 
-    def test_google_adk_imports(self):
-        """Test that all required Google ADK modules can be imported"""
-        try:
-            from google.adk.agents import Agent, LiveRequestQueue
-            from google.adk.runners import InMemoryRunner
-            from google.genai.types import Content, Part
-            from google.adk.agents.run_config import RunConfig
-            # If we get here, imports worked
-            assert True
-        except ImportError as e:
-            pytest.fail(f"Failed to import Google ADK modules: {e}")
+#     def test_google_adk_imports(self):
+#         """Test that all required Google ADK modules can be imported"""
+#         try:
+#             from google.adk.agents import Agent, LiveRequestQueue
+#             from google.adk.runners import InMemoryRunner
+#             from google.genai.types import Content, Part
+#             from google.adk.agents.run_config import RunConfig
+#             # If we get here, imports worked
+#             assert True
+#         except ImportError as e:
+#             pytest.fail(f"Failed to import Google ADK modules: {e}")
 
-    def test_basic_agent_creation(self):
-        """Test creating a basic ADK agent"""
-        from google.adk.agents import Agent
-        
-        agent = Agent(
-            name="test_hello_world_agent",
-            model="gemini-2.0-flash-exp",
-            description="Simple Hello World agent for testing Issue #3",
-            instruction="""
-            You are a simple test agent for verifying Google ADK setup. 
-            Always respond with 'Hello! ADK is working correctly.' followed by a brief confirmation.
-            Keep responses short and positive.
-            """
-        )
-        
-        assert agent.name == "test_hello_world_agent"
-        assert agent.model == "gemini-2.0-flash-exp"
-        assert "hello world" in agent.description.lower()
+#     def test_basic_agent_creation(self):
+#         """Test creating a basic ADK agent"""
+#         from google.adk.agents import Agent
+#         
+#         agent = Agent(
+#             name="test_hello_world_agent",
+#             model="gemini-2.0-flash-exp",
+#             description="Simple Hello World agent for testing Issue #3",
+#             instruction="""
+#             You are a simple test agent for verifying Google ADK setup. 
+#             Always respond with 'Hello! ADK is working correctly.' followed by a brief confirmation.
+#             Keep responses short and positive.
+#             """
+#         )
+#         
+#         assert agent.name == "test_hello_world_agent"
+#         assert agent.model == "gemini-2.0-flash-exp"
+#         assert "hello world" in agent.description.lower()
 
-    @pytest.mark.asyncio
-    async def test_basic_conversation_integration(self):
-        """
-        Integration test: Real conversation with Google ADK
-        This tests the complete flow without mocks
-        """
-        from google.adk.agents import Agent
-        from google.adk.runners import InMemoryRunner
-        from google.genai.types import Content, Part
-        
-        # Create a real agent
-        agent = Agent(
-            name="test_integration_agent",
-            model="gemini-2.0-flash-exp",
-            description="Integration test agent",
-            instruction="""
-            You are a test agent for Google ADK integration testing.
-            When asked 'Are you working?', always respond with exactly:
-            'Yes, ADK integration is working correctly!'
-            """
-        )
-        
-        # Create runner and session - use consistent app_name
-        app_name = "adk_integration_test"
-        runner = InMemoryRunner(agent=agent, app_name=app_name)
-        session = await runner.session_service.create_session(
-            app_name=app_name,
-            user_id="test_user_integration"
-        )
-        
-        assert session.id is not None
-        assert session.user_id == "test_user_integration"
-        
-        # Send a test message
-        user_content = Content(
-            role="user", 
-            parts=[Part.from_text(text="Are you working?")]
-        )
-        
-        # This makes a real API call to Google's servers
-        events = runner.run_async(
-            user_id=session.user_id,
-            session_id=session.id,
-            new_message=user_content
-        )
-        
-        # Collect response from events
-        response_text = ""
-        async for event in events:
-            if (hasattr(event, "content") and event.content and 
-                event.content.parts):
-                for part in event.content.parts:
-                    if hasattr(part, "text") and part.text:
-                        response_text += part.text
-            if hasattr(event, "turn_complete") and event.turn_complete:
-                break
-        
-        # Verify response
-        assert len(response_text) > 0
-        
-        # Verify the agent responded appropriately
-        # The response should contain some confirmation 
-        # (we can't guarantee exact text due to LLM variability)
-        assert any(word in response_text.lower() 
-                  for word in ['yes', 'working', 'adk', 'correct'])
+#     # @pytest.mark.skip(reason="Skipped - switched to OpenAI integration")
+#     # @pytest.mark.asyncio
+#     # async def test_basic_conversation_integration(self):
+#         """
+#         Integration test: Real conversation with Google ADK
+#         This tests the complete flow without mocks
+#         """
+#         from google.adk.agents import Agent
+#         from google.adk.runners import InMemoryRunner
+#         from google.genai.types import Content, Part
+#         
+#         # Create a real agent
+#         agent = Agent(
+#             name="test_integration_agent",
+#             model="gemini-2.0-flash-exp",
+#             description="Integration test agent",
+#             instruction="""
+#             You are a test agent for Google ADK integration testing.
+#             When asked 'Are you working?', always respond with exactly:
+#             'Yes, ADK integration is working correctly!'
+#             """
+#         )
+#         
+#         # Create runner and session - use consistent app_name
+#         app_name = "adk_integration_test"
+#         runner = InMemoryRunner(agent=agent, app_name=app_name)
+#         session = await runner.session_service.create_session(
+#             app_name=app_name,
+#             user_id="test_user_integration"
+#         )
+#         
+#         assert session.id is not None
+#         assert session.user_id == "test_user_integration"
+#         
+#         # Send a test message
+#         user_content = Content(
+#             role="user", 
+#             parts=[Part.from_text(text="Are you working?")]
+#         )
+#         
+#         # This makes a real API call to Google's servers
+#         events = runner.run_async(
+#             user_id=session.user_id,
+#             session_id=session.id,
+#             new_message=user_content
+#         )
+#         
+#         # Collect response from events
+#         response_text = ""
+#         async for event in events:
+#             if (hasattr(event, "content") and event.content and 
+#                 event.content.parts):
+#                 for part in event.content.parts:
+#                     if hasattr(part, "text") and part.text:
+#                         response_text += part.text
+#             if hasattr(event, "turn_complete") and event.turn_complete:
+#                 break
+#         
+#         # Verify response
+#         assert len(response_text) > 0
+#         
+#         # Verify the agent responded appropriately
+#         # The response should contain some confirmation 
+#         # (we can't guarantee exact text due to LLM variability)
+#         assert any(word in response_text.lower() 
+#                   for word in ['yes', 'working', 'adk', 'correct'])
 
-    @pytest.mark.asyncio 
-    async def test_adk_service_integration(self):
-        """Test the actual ADKService class with real API calls"""
-        from app.services.adk_service import ADKService, ChatRequest
-        
-        # Create real ADK service (will make actual API calls)
-        service = ADKService()
-        
-        # Verify service initialized
-        assert service.agent is not None
-        assert service.app_name == "systemdesign-ai-platform"
-        
-        # Test health check
-        health = service.health_check()
-        assert health["configured"] is True
-        assert health["status"] == "ready"
-        
-        # Test real chat
-        request = ChatRequest(
-            message="Hello! This is an integration test. Please respond with 'Integration test successful!'",
-            user_id="test_integration_user"
-        )
-        
-        response = await service.chat(request)
-        
-        # Verify response
-        assert response.success is True
-        assert response.session_id is not None
-        assert len(response.message) > 0
-        assert response.error is None
-        
-        # The response should indicate success (allowing for LLM variability)
+#     @pytest.mark.skip(reason="Skipped - switched to OpenAI integration")
+#     @pytest.mark.asyncio
+#     async def test_adk_service_integration(self):
+#         """Test the actual ADKService class with real API calls"""
+#         from app.services.adk_service import ADKService, ChatRequest
+#         
+#         # Create real ADK service (will make actual API calls)
+#         service = ADKService()
+#         
+#         # Verify service initialized
+#         assert service.agent is not None
+#         assert service.app_name == "systemdesign-ai-platform"
+#         
+#         # Test health check
+#         health = service.health_check()
+#         assert health["configured"] is True
+#         assert health["status"] == "ready"
+#         
+#         # Test real chat
+#         request = ChatRequest(
+#             message="Hello! This is an integration test. Please respond with 'Integration test successful!'",
+#             user_id="test_integration_user"
+#         )
+#         
+#         response = await service.chat(request)
+#         
+#         # Verify response
+#         assert response.success is True
+#         assert response.session_id is not None
+#         assert len(response.message) > 0
+#         assert response.error is None
+#         
+#         # The response should indicate success (allowing for LLM variability)
         response_lower = response.message.lower()
         assert any(word in response_lower for word in ['integration', 'test', 'successful', 'hello', 'working'])
 

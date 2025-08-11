@@ -22,7 +22,11 @@ import {
     Plus,
     Move,
     Link,
-    Target
+    Target,
+    MousePointer,
+    Undo,
+    Redo,
+    Loader2
 } from 'lucide-react'
 
 export interface SystemBlock {
@@ -45,7 +49,8 @@ export interface Connection {
 
 interface WhiteboardCanvasProps {
     onSave?: (pngData: string) => void
-    className?: string
+    onAnalyze?: (pngData: string) => void
+    isAnalyzing?: boolean
 }
 
 const BLOCK_TYPES = {
@@ -131,20 +136,24 @@ const BLOCK_TYPES = {
     }
 }
 
-export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardCanvasProps) {
+export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
+    const [selectedTool, setSelectedTool] = useState<'select' | 'connect'>('select')
     const [blocks, setBlocks] = useState<SystemBlock[]>([])
     const [connections, setConnections] = useState<Connection[]>([])
-    const [selectedBlock, setSelectedBlock] = useState<string | null>(null)
+    const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
+    const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null)
     const [isConnecting, setIsConnecting] = useState(false)
     const [connectionStart, setConnectionStart] = useState<string | null>(null)
-    const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
-    const containerRef = useRef<HTMLDivElement>(null)
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+    const [isDragging, setIsDragging] = useState(false)
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+    const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null)
+    const [editingLabel, setEditingLabel] = useState('')
+    const [history, setHistory] = useState<Array<{ blocks: SystemBlock[], connections: Connection[] }>>([])
+    const [redoStack, setRedoStack] = useState<Array<{ blocks: SystemBlock[], connections: Connection[] }>>([])
 
     // Simple undo/redo stacks
-    const [history, setHistory] = useState<Array<{ blocks: SystemBlock[]; connections: Connection[] }>>([])
-    const [redoStack, setRedoStack] = useState<Array<{ blocks: SystemBlock[]; connections: Connection[] }>>([])
-
     const snapshot = useCallback(() => {
         // Avoid capturing an empty baseline so first Undo never wipes the canvas
         if (blocks.length === 0 && connections.length === 0) return
@@ -154,14 +163,6 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
         ])
         setRedoStack([])
     }, [blocks, connections])
-    const [isDragging, setIsDragging] = useState(false)
-    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
-    const [selectedTool, setSelectedTool] = useState<'select' | 'connect'>('select')
-    const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null)
-    const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [analysisResult, setAnalysisResult] = useState<any>(null)
-    const [isAnalyzing, setIsAnalyzing] = useState(false)
 
     // Initialize canvas
     // Keep a ref to the latest draw function so resize callbacks can repaint immediately
@@ -282,8 +283,8 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
             ctx.fillRect(block.x, block.y, block.width, block.height)
 
             // Border
-            ctx.strokeStyle = selectedBlock === block.id ? '#111827' : blockConfig.borderHex
-            ctx.lineWidth = selectedBlock === block.id ? 3 : 1
+            ctx.strokeStyle = selectedBlockId === block.id ? '#111827' : blockConfig.borderHex
+            ctx.lineWidth = selectedBlockId === block.id ? 3 : 1
             ctx.strokeRect(block.x, block.y, block.width, block.height)
 
             // Label
@@ -292,7 +293,7 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
             ctx.textAlign = 'center'
             ctx.fillText(block.label, block.x + block.width / 2, block.y + block.height / 2 + 4)
         })
-    }, [blocks, connections, selectedBlock])
+    }, [blocks, connections, selectedBlockId])
 
     // Redraw canvas when blocks or connections change, and avoid flicker by batching in rAF
     useEffect(() => {
@@ -370,7 +371,7 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
 
         if (hitConnectionId) {
             setSelectedConnectionId(hitConnectionId)
-            setSelectedBlock(null)
+            setSelectedBlockId(null)
             return
         } else {
             setSelectedConnectionId(null)
@@ -400,20 +401,20 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
                     setConnections(prev => [...prev, newConnection])
                     setConnectionStart(null)
                     setIsConnecting(false)
-                    setMousePos(null)
+                    setMousePos({ x: 0, y: 0 }) // Reset mousePos after connection
                 }
             } else {
-                setSelectedBlock(clickedBlock.id)
+                setSelectedBlockId(clickedBlock.id)
             }
         } else {
             // Clicking on empty canvas should only change selection state.
             // It must not modify blocks or connections.
-            setSelectedBlock(null)
+            setSelectedBlockId(null)
             setSelectedConnectionId(null)
             if (selectedTool === 'connect') {
                 setConnectionStart(null)
                 setIsConnecting(false)
-                setMousePos(null)
+                setMousePos({ x: 0, y: 0 }) // Reset mousePos after connection attempt
             }
         }
     }
@@ -446,7 +447,7 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
                 x: x - clickedBlock.x,
                 y: y - clickedBlock.y
             })
-            setSelectedBlock(clickedBlock.id)
+            setSelectedBlockId(clickedBlock.id)
         }
     }
 
@@ -466,9 +467,9 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
             return
         }
 
-        if (!isDragging || !selectedBlock) return
+        if (!isDragging || !selectedBlockId) return
         setBlocks(prev => prev.map(block => (
-            block.id === selectedBlock
+            block.id === selectedBlockId
                 ? { ...block, x: x - dragOffset.x, y: y - dragOffset.y }
                 : block
         )))
@@ -485,18 +486,18 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
 
     // Delete selected block
     const deleteSelectedBlock = () => {
-        if (!selectedBlock) return
+        if (!selectedBlockId) return
 
         // Snapshot this discrete delete action
         snapshot()
         // Remove connections involving this block
         setConnections(prev => prev.filter(conn =>
-            conn.from !== selectedBlock && conn.to !== selectedBlock
+            conn.from !== selectedBlockId && conn.to !== selectedBlockId
         ))
 
         // Remove block
-        setBlocks(prev => prev.filter(block => block.id !== selectedBlock))
-        setSelectedBlock(null)
+        setBlocks(prev => prev.filter(block => block.id !== selectedBlockId))
+        setSelectedBlockId(null)
     }
 
     // Clear canvas
@@ -505,7 +506,7 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
         snapshot()
         setBlocks([])
         setConnections([])
-        setSelectedBlock(null)
+        setSelectedBlockId(null)
         setConnectionStart(null)
         setIsConnecting(false)
     }
@@ -543,10 +544,10 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
         setBlocks(prev.blocks)
         setConnections(prev.connections)
         setHistory(h => h.slice(0, -1))
-        setSelectedBlock(null)
+        setSelectedBlockId(null)
         setConnectionStart(null)
         setIsConnecting(false)
-        setMousePos(null)
+        setMousePos({ x: 0, y: 0 })
     }
 
     const handleRedo = () => {
@@ -557,324 +558,233 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
         setBlocks(next.blocks)
         setConnections(next.connections)
         setRedoStack(r => r.slice(0, -1))
-        setSelectedBlock(null)
+        setSelectedBlockId(null)
         setConnectionStart(null)
         setIsConnecting(false)
-        setMousePos(null)
+        setMousePos({ x: 0, y: 0 })
     }
 
-    const handleWhiteboardSave = async (pngData: string) => {
-        try {
-            setIsLoading(true)
-            const response = await fetch('/api/whiteboard/upload', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    png_data: pngData,
-                    user_id: 'web_user',
-                    session_id: undefined,
-                    description: 'System design whiteboard diagram'
-                }),
-            })
-            if (!response.ok) {
-                let errText = `Upload failed (${response.status})`
-                try { const errJson = await response.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
-                throw new Error(errText)
-            }
-            const data = await response.json()
-            console.log('PNG uploaded successfully:', data.artifact_id)
-            alert(`Whiteboard saved successfully! Artifact ID: ${data.artifact_id}`)
-        } catch (error) {
-            console.error('Failed to upload PNG:', error)
-            alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const handleAnalyzeWhiteboard = async () => {
-        if (blocks.length === 0) {
-            setError('Please add some components to analyze')
-            return
-        }
+    const handleAnalyzeWhiteboard = () => {
+        if (!onAnalyze) return
 
         try {
-            setIsAnalyzing(true)
-            setError(null)
-            setAnalysisResult(null)
-
-            // Convert canvas to PNG
-            const canvas = document.querySelector('canvas')
-            if (!canvas) {
-                throw new Error('Canvas not found')
-            }
+            const canvas = canvasRef.current
+            if (!canvas) return
 
             const pngData = canvas.toDataURL('image/png')
-
-            // Upload PNG first
-            const uploadResponse = await fetch('/api/whiteboard/upload', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    png_data: pngData,
-                    user_id: 'web_user',
-                    session_id: undefined,
-                    description: 'System design whiteboard diagram for analysis'
-                }),
-            })
-
-            if (!uploadResponse.ok) {
-                let errText = `Upload failed (${uploadResponse.status})`
-                try { const errJson = await uploadResponse.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
-                throw new Error(errText)
-            }
-
-            const uploadData = await uploadResponse.json()
-            const artifactId = uploadData.artifact_id
-
-            // Now analyze the uploaded PNG
-            const analysisResponse = await fetch('/api/whiteboard/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    artifact_id: artifactId,
-                    user_id: 'web_user',
-                    session_id: undefined,
-                    analysis_type: 'comprehensive'
-                }),
-            })
-
-            if (!analysisResponse.ok) {
-                let errText = `Analysis failed (${analysisResponse.status})`
-                try { const errJson = await analysisResponse.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
-                throw new Error(errText)
-            }
-
-            const analysisData = await analysisResponse.json()
-            setAnalysisResult(analysisData)
-            console.log('Analysis completed:', analysisData)
-
+            onAnalyze(pngData)
         } catch (error) {
             console.error('Failed to analyze whiteboard:', error)
-            setError(error instanceof Error ? error.message : 'Unknown error')
-        } finally {
-            setIsAnalyzing(false)
         }
+    }
+
+    const handleConnectionLabelEdit = () => {
+        if (!editingConnectionId || !editingLabel.trim()) return
+
+        setConnections(prev => prev.map(conn =>
+            conn.id === editingConnectionId
+                ? { ...conn, label: editingLabel.trim() }
+                : conn
+        ))
+
+        setEditingConnectionId(null)
+        setEditingLabel('')
+    }
+
+    const handleCanvasMouseLeave = () => {
+        handleMouseUp()
     }
 
     return (
-        <div className={`flex flex-col h-full ${className}`}>
-            {/* Toolbar */}
-            <Card className="mb-4">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                        <Plus className="w-5 h-5" />
-                        System Design Whiteboard
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        <Button
-                            variant={selectedTool === 'select' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setSelectedTool('select')}
-                            className="flex items-center gap-2"
-                        >
-                            <Move className="w-4 h-4" />
-                            Select
-                        </Button>
-                        <Button
-                            variant={selectedTool === 'connect' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setSelectedTool('connect')}
-                            className="flex items-center gap-2"
-                        >
-                            <Link className="w-4 h-4" />
-                            Connect
-                        </Button>
-                    </div>
+        <div className="h-full flex flex-col bg-white rounded-lg border border-gray-200">
+            {/* Main Action Buttons - Top Priority */}
+            <div className="p-4 border-b border-gray-200 bg-blue-50 flex justify-center items-center gap-4">
+                <Button
+                    variant="default"
+                    size="default"
+                    onClick={saveCanvas}
+                    disabled={blocks.length === 0}
+                    className="h-12 px-6 bg-green-600 hover:bg-green-700 text-white font-semibold"
+                >
+                    <Download className="h-5 w-5 mr-2" />
+                    Save PNG
+                </Button>
+                <Button
+                    variant="default"
+                    size="default"
+                    onClick={handleAnalyzeWhiteboard}
+                    disabled={isAnalyzing || blocks.length === 0}
+                    className="h-12 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                >
+                    {isAnalyzing ? (
+                        <>
+                            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                            Analyzing...
+                        </>
+                    ) : (
+                        <>
+                            <Target className="h-5 w-5 mr-2" />
+                            Analyze Design
+                        </>
+                    )}
+                </Button>
+            </div>
 
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {Object.entries(BLOCK_TYPES).map(([type, config]) => {
-                            const IconComponent = config.icon
-                            return (
-                                <Button
-                                    key={type}
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleBlockTypeClick(type as SystemBlock['type'])}
-                                    className="flex items-center gap-2"
-                                >
-                                    <IconComponent className="w-4 h-4" />
-                                    {config.label}
-                                </Button>
-                            )
-                        })}
-                    </div>
+            {/* Secondary Toolbar */}
+            <div className="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant={selectedTool === 'select' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSelectedTool('select')}
+                        className="h-8 px-3"
+                    >
+                        <MousePointer className="h-4 w-4 mr-1" />
+                        Select
+                    </Button>
+                    <Button
+                        variant={selectedTool === 'connect' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSelectedTool('connect')}
+                        className="h-8 px-3"
+                    >
+                        <Link className="h-4 w-4 mr-1" />
+                        Connect
+                    </Button>
+                </div>
 
-                    <div className="flex gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={clearCanvas}
-                            className="flex items-center gap-2"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                            Clear
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={saveCanvas}
-                            className="flex items-center gap-2"
-                        >
-                            <Download className="w-4 h-4" />
-                            Save PNG
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleAnalyzeWhiteboard}
-                            disabled={isAnalyzing || blocks.length === 0}
-                            className="flex items-center gap-2"
-                        >
-                            {isAnalyzing ? (
-                                <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
-                            ) : (
-                                <Target className="w-4 h-4" />
-                            )}
-                            {isAnalyzing ? 'Analyzing...' : 'Analyze Design'}
-                        </Button>
-                        {selectedBlock && (
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleUndo}
+                        disabled={history.length === 0}
+                        className="h-8 px-3"
+                    >
+                        <Undo className="h-4 w-4 mr-1" />
+                        Undo
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRedo}
+                        disabled={redoStack.length === 0}
+                        className="h-8 px-3"
+                    >
+                        <Redo className="h-4 w-4 mr-1" />
+                        Redo
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearCanvas}
+                        className="h-8 px-3"
+                    >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Clear
+                    </Button>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <div className="text-sm text-gray-600 font-medium">
+                        {blocks.length} blocks, {connections.length} connections
+                    </div>
+                    <div className="text-sm text-blue-600 font-medium">
+                        Tool: {selectedTool === 'select' ? 'Select' : 'Connect'}
+                    </div>
+                </div>
+            </div>
+
+            {/* Block Type Buttons */}
+            <div className="p-3 border-b border-gray-200 bg-gray-50">
+                <div className="flex flex-wrap gap-2">
+                    {Object.entries(BLOCK_TYPES).map(([type, config]) => {
+                        const IconComponent = config.icon
+                        return (
                             <Button
-                                variant="destructive"
+                                key={type}
+                                variant="outline"
                                 size="sm"
-                                onClick={deleteSelectedBlock}
-                                className="flex items-center gap-2"
+                                onClick={() => handleBlockTypeClick(type as SystemBlock['type'])}
+                                className="h-8 px-3 text-xs"
                             >
-                                <Trash2 className="w-4 h-4" />
-                                Delete Block
+                                <IconComponent className="h-4 w-4 mr-1" />
+                                {config.label}
                             </Button>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
+                        )
+                    })}
+                </div>
+            </div>
 
-            {/* Canvas */}
-            <div ref={containerRef} className="flex-1 bg-white border rounded-lg overflow-hidden">
+            {/* Canvas Container */}
+            <div className="flex-1 relative overflow-hidden">
                 <canvas
                     ref={canvasRef}
-                    className={`w-full h-full ${selectedTool === 'select' ? 'cursor-move' : 'cursor-crosshair'}`}
+                    className="w-full h-full border border-gray-300 cursor-crosshair"
                     onClick={handleCanvasClick}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseUp}
                 />
-            </div>
 
-            {/* Status Bar */}
-            <div className="mt-2 text-sm text-gray-600 flex items-center justify-between">
-                <div>
-                    {selectedTool === 'connect' && connectionStart && (
-                        <span className="text-blue-600">
-                            Click on another block to create connection
-                        </span>
-                    )}
-                    {selectedTool === 'select' && (
-                        <span>Click and drag blocks to move them</span>
-                    )}
-                </div>
-                <div className="flex items-center gap-4">
-                    <span>Blocks: {blocks.length}</span>
-                    <span>Connections: {connections.length}</span>
-                    {selectedBlock && (
-                        <Badge variant="secondary">
-                            Selected: {blocks.find(b => b.id === selectedBlock)?.label}
-                        </Badge>
-                    )}
-                    {selectedConnectionId && (
-                        <Badge variant="secondary">Connection selected</Badge>
-                    )}
-                </div>
-            </div>
-            {/* Actions */}
-            <div className="mt-2 flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={handleUndo} className="flex items-center gap-2">
-                    <RotateCcw className="w-4 h-4" /> Undo
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleRedo} className="flex items-center gap-2">
-                    <RotateCw className="w-4 h-4" /> Redo
-                </Button>
-                {selectedConnectionId && (
-                    <div className="flex items-center gap-2 ml-2">
-                        <span className="text-sm text-gray-600">Label:</span>
+                {/* Connection Preview */}
+                {isConnecting && connectionStart && (
+                    <svg
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ width: '100%', height: '100%' }}
+                    >
+                        <line
+                            x1={blocks.find(b => b.id === connectionStart)?.x || 0}
+                            y1={blocks.find(b => b.id === connectionStart)?.y || 0}
+                            x2={mousePos.x}
+                            y2={mousePos.y}
+                            stroke="blue"
+                            strokeWidth="2"
+                            strokeDasharray="5,5"
+                        />
+                    </svg>
+                )}
+
+                {/* Connection Label Editor */}
+                {editingConnectionId && (
+                    <div
+                        className="absolute z-10"
+                        style={{
+                            left: mousePos.x + 10,
+                            top: mousePos.y - 20
+                        }}
+                    >
                         <Input
-                            value={connections.find(c => c.id === selectedConnectionId)?.label ?? ''}
-                            onChange={e => {
-                                const newLabel = e.target.value
-                                snapshot()
-                                setConnections(prev => prev.map(c => c.id === selectedConnectionId ? { ...c, label: newLabel } : c))
+                            value={editingLabel}
+                            onChange={(e) => setEditingLabel(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleConnectionLabelEdit()
+                                } else if (e.key === 'Escape') {
+                                    setEditingConnectionId(null)
+                                    setEditingLabel('')
+                                }
                             }}
-                            placeholder="e.g., HTTP, gRPC, Kafka"
-                            className="h-8 w-56"
+                            onBlur={handleConnectionLabelEdit}
+                            className="w-24 h-8 text-xs"
+                            autoFocus
                         />
                     </div>
                 )}
             </div>
 
-            {/* Analysis Results */}
-            {error && (
-                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-800 text-sm">Error: {error}</p>
+            {/* Status Bar */}
+            <div className="p-2 border-t border-gray-200 bg-gray-50 text-xs text-gray-600">
+                <div className="flex items-center justify-between">
+                    <span>
+                        {blocks.length} blocks, {connections.length} connections
+                    </span>
+                    <span>
+                        Tool: {selectedTool === 'select' ? 'Select' : 'Connect'}
+                    </span>
                 </div>
-            )}
-
-            {analysisResult && (
-                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h3 className="text-lg font-semibold text-blue-900 mb-3">Design Analysis Results</h3>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <h4 className="font-medium text-blue-800 mb-2">Components Identified</h4>
-                            <ul className="text-sm text-blue-700 space-y-1">
-                                {analysisResult.components_identified?.map((component: string, index: number) => (
-                                    <li key={index} className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                        {component}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        <div>
-                            <h4 className="font-medium text-blue-800 mb-2">Architectural Feedback</h4>
-                            <p className="text-sm text-blue-700">{analysisResult.architectural_feedback}</p>
-                        </div>
-
-                        <div>
-                            <h4 className="font-medium text-blue-800 mb-2">Suggestions</h4>
-                            <ul className="text-sm text-blue-700 space-y-1">
-                                {analysisResult.suggestions?.map((suggestion: string, index: number) => (
-                                    <li key={index} className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                        {suggestion}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-blue-200">
-                        <div className="flex items-center justify-between text-sm text-blue-600">
-                            <span>Confidence Score: {(analysisResult.confidence_score * 100).toFixed(1)}%</span>
-                            {analysisResult.cost_estimate && (
-                                <span>Estimated Cost: ${analysisResult.cost_estimate.toFixed(4)}</span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+            </div>
         </div>
     )
 }

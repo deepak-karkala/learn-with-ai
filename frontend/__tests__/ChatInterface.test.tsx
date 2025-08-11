@@ -1,6 +1,6 @@
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { ChatInterface, Message } from '@/components/ChatInterface'
+import { ChatInterface, Message } from '../components/ChatInterface'
 
 // Mock the lucide-react icons
 jest.mock('lucide-react', () => ({

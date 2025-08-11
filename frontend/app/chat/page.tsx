@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { ChatInterface, Message } from '@/components/ChatInterface'
-import { AuthUI } from '@/components/AuthUI'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { ChatInterface, Message } from '../../components/ChatInterface'
+import { AuthUI } from '../../components/AuthUI'
+import { Badge } from '../../components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
+import { Button } from '../../components/ui/button'
 import { BookOpen, Target, TrendingUp, Clock } from 'lucide-react'
 
 // Mock user data - in real app this would come from authentication service

@@ -20,6 +20,23 @@ class TestWhiteboardService:
         """Mock ADK service."""
         mock_service = Mock(spec=ADKService)
         mock_service.store_artifact = AsyncMock()
+        
+        # Mock multimodal analysis response
+        mock_multimodal_response = Mock()
+        mock_multimodal_response.success = True
+        mock_multimodal_response.analysis = """
+        COMPONENTS: Load Balancer, Web Server, Database, Redis Cache
+        FEEDBACK: Good basic architecture with clear separation of concerns.
+        SUGGESTIONS: Add health check endpoints, Implement circuit breakers
+        """
+        mock_multimodal_response.confidence_score = 0.85
+        mock_multimodal_response.cost_estimate = 0.005
+        mock_multimodal_response.tokens_used = 150
+        
+        mock_service.analyze_image_multimodal = AsyncMock(
+            return_value=mock_multimodal_response
+        )
+        
         return mock_service
     
     @pytest.fixture
@@ -116,34 +133,95 @@ class TestWhiteboardService:
     
     @pytest.mark.asyncio
     async def test_analyze_whiteboard_success(self, whiteboard_service, sample_png_data):
-        """Test successful whiteboard analysis."""
+        """Test successful whiteboard analysis using multimodal LLM."""
         # First upload a PNG
         upload_request = PNGUploadRequest(
             png_data=sample_png_data,
-            user_id="test_user"
-        )
-        upload_response = await whiteboard_service.upload_png(upload_request)
-        
-        # Then analyze it
-        analysis_request = WhiteboardAnalysisRequest(
-            artifact_id=upload_response.artifact_id,
             user_id="test_user",
+            session_id="test_session"
+        )
+        
+        upload_response = await whiteboard_service.upload_png(upload_request)
+        artifact_id = upload_response.artifact_id
+        
+        # Request analysis
+        analysis_request = WhiteboardAnalysisRequest(
+            artifact_id=artifact_id,
+            user_id="test_user",
+            session_id="test_session",
             analysis_type="comprehensive"
         )
         
-        analysis_response = await whiteboard_service.analyze_whiteboard(analysis_request)
+        response = await whiteboard_service.analyze_whiteboard(analysis_request)
         
-        assert analysis_response.status == "completed"
-        assert analysis_response.artifact_id == upload_response.artifact_id
-        assert len(analysis_response.components_identified) > 0
-        assert analysis_response.architectural_feedback
-        assert len(analysis_response.suggestions) > 0
-        assert 0 <= analysis_response.confidence_score <= 1
+        assert response.artifact_id == artifact_id
+        assert response.status == "completed"
+        assert response.confidence_score > 0
+        assert len(response.components_identified) > 0
+        assert response.architectural_feedback
+        assert len(response.suggestions) > 0
         
-        # Verify analysis was stored
-        analysis = whiteboard_service.get_analysis(analysis_response.analysis_id)
+        # Verify analysis was stored with metadata
+        analysis = whiteboard_service.get_analysis(response.analysis_id)
         assert analysis is not None
-        assert analysis['artifact_id'] == upload_response.artifact_id
+        assert analysis['cost_estimate'] is not None
+        assert analysis['tokens_used'] is not None
+        assert analysis['raw_analysis'] is not None
+        
+        # Verify ADK service was called
+        whiteboard_service.adk_service.analyze_image_multimodal.assert_called_once()
+    
+    def test_create_analysis_prompt(self, whiteboard_service):
+        """Test analysis prompt creation for different types."""
+        # Test comprehensive analysis
+        comprehensive_prompt = whiteboard_service._create_analysis_prompt("comprehensive")
+        assert "COMPONENTS:" in comprehensive_prompt
+        assert "FEEDBACK:" in comprehensive_prompt
+        assert "SUGGESTIONS:" in comprehensive_prompt
+        assert "Data flow patterns" in comprehensive_prompt
+        assert "monitoring" in comprehensive_prompt.lower()
+        
+        # Test security analysis
+        security_prompt = whiteboard_service._create_analysis_prompt("security")
+        assert "security" in security_prompt.lower()
+        assert "authentication" in security_prompt.lower()
+        assert "encryption" in security_prompt.lower()
+        
+        # Test performance analysis
+        performance_prompt = whiteboard_service._create_analysis_prompt("performance")
+        assert "performance" in performance_prompt.lower()
+        assert "bottlenecks" in performance_prompt.lower()
+        assert "caching" in performance_prompt.lower()
+    
+    def test_parse_analysis_response(self, whiteboard_service):
+        """Test parsing of LLM analysis responses."""
+        # Test structured response parsing
+        structured_response = """
+        COMPONENTS: Load Balancer, Web Server, Database
+        FEEDBACK: Good architecture with clear separation
+        SUGGESTIONS: Add monitoring, implement caching
+        """
+        
+        parsed = whiteboard_service._parse_analysis_response(
+            structured_response, "comprehensive"
+        )
+        
+        assert "Load Balancer" in parsed['components']
+        assert "Web Server" in parsed['components']
+        assert "Database" in parsed['components']
+        assert "Good architecture" in parsed['feedback']
+        assert "Add monitoring" in parsed['suggestions']
+        
+        # Test fallback parsing for unstructured responses
+        unstructured_response = "This is a system with a load balancer and web server. You should add monitoring."
+        
+        parsed = whiteboard_service._parse_analysis_response(
+            unstructured_response, "comprehensive"
+        )
+        
+        assert "Load Balancer" in parsed['components']
+        assert "Web Server" in parsed['components']
+        assert "monitoring" in parsed['suggestions'][0].lower()
     
     @pytest.mark.asyncio
     async def test_analyze_whiteboard_artifact_not_found(self, whiteboard_service):

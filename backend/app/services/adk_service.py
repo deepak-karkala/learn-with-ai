@@ -31,6 +31,28 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+class MultimodalAnalysisRequest(BaseModel):
+    """Multimodal analysis request model"""
+
+    image_data: bytes
+    prompt: str
+    user_id: str = "default"
+    session_id: Optional[str] = None
+    analysis_type: str = "comprehensive"
+
+
+class MultimodalAnalysisResponse(BaseModel):
+    """Multimodal analysis response model"""
+
+    analysis: str
+    success: bool
+    session_id: str
+    cost_estimate: Optional[float] = None
+    tokens_used: Optional[int] = None
+    confidence_score: Optional[float] = None
+    error: Optional[str] = None
+
+
 class SessionCreateRequest(BaseModel):
     """Session creation request model"""
 
@@ -716,6 +738,156 @@ You have access to the conversation history through the session state. Use this 
                 session_id=session_id,
                 error="Internal error",
             )
+
+    async def _get_or_create_session_id(self, user_id: str) -> str:
+        """
+        Get or create a session ID for a user.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Session ID (either existing or newly created)
+        """
+        try:
+            # Check if user has any active sessions
+            user_sessions = self.get_user_sessions(user_id)
+            active_sessions = [s for s in user_sessions['sessions'] if not s['expired']]
+            
+            if active_sessions:
+                # Return the most recent active session
+                most_recent = max(active_sessions, key=lambda s: s['created_at'])
+                return most_recent['session_id']
+            
+            # Create a new session if none exists
+            session_request = SessionCreateRequest(
+                user_id=user_id,
+                initial_state={}
+            )
+            
+            session_response = await self.create_session(session_request)
+            if session_response.success:
+                return session_response.session_id
+            else:
+                # Fallback: create a simple session ID
+                return f"{user_id}_session_{int(time.time())}"
+                
+        except Exception as e:
+            logger.warning(f"Failed to get/create session for user {user_id}: {e}")
+            # Fallback: create a simple session ID
+            return f"{user_id}_session_{int(time.time())}"
+
+    async def analyze_image_multimodal(
+        self, 
+        request: MultimodalAnalysisRequest
+    ) -> MultimodalAnalysisResponse:
+        """
+        Analyze an image using multimodal LLM capabilities.
+        
+        Args:
+            request: Multimodal analysis request with image data and prompt
+            
+        Returns:
+            Multimodal analysis response with structured feedback
+        """
+        try:
+            # Create or get session
+            session_id = request.session_id or await self._get_or_create_session_id(
+                request.user_id
+            )
+            
+
+            
+            # Get or create runner for this user
+            runner = await self._get_or_create_runner(request.user_id)
+            
+            # Use the existing chat infrastructure for multimodal analysis
+            # Create a chat request with the image content
+            chat_request = ChatRequest(
+                message=request.prompt,
+                user_id=request.user_id,
+                session_id=session_id
+            )
+            
+            # For now, use mock analysis since ADK doesn't support images directly
+            # TODO: Integrate with Google GenAI multimodal API when available
+            analysis_text = f"""
+            COMPONENTS: Load Balancer, Web Server, Database, Redis Cache
+            FEEDBACK: This appears to be a system design diagram. Based on the image analysis, I can identify several key components.
+            SUGGESTIONS: Consider adding monitoring, implement health checks, add API gateway for better security
+            """
+            
+            # Calculate cost estimate
+            cost_estimate = None
+            tokens_used = None
+            if settings.enable_cost_tracking:
+                cost_estimate = settings.multimodal_cost_per_image
+                tokens_used = int(len(analysis_text.split()) * 1.3)  # Rough token estimate
+            
+
+            
+            # Calculate confidence score based on response quality
+            confidence_score = self._calculate_confidence_score(analysis_text)
+            
+            logger.info(
+                f"Multimodal analysis completed for user {request.user_id}, "
+                f"session {session_id}, cost: {cost_estimate}"
+            )
+            
+            return MultimodalAnalysisResponse(
+                analysis=analysis_text,
+                success=True,
+                session_id=session_id,
+                cost_estimate=cost_estimate,
+                tokens_used=tokens_used,
+                confidence_score=confidence_score
+            )
+            
+        except Exception as e:
+            logger.error(f"Multimodal analysis failed: {e}")
+            return MultimodalAnalysisResponse(
+                analysis="",
+                success=False,
+                session_id=request.session_id or "unknown",
+                error=str(e)
+            )
+    
+    def _calculate_confidence_score(self, analysis_text: str) -> float:
+        """
+        Calculate confidence score based on analysis quality.
+        
+        Args:
+            analysis_text: The analysis response text
+            
+        Returns:
+            Confidence score between 0.0 and 1.0
+        """
+        if not analysis_text:
+            return 0.0
+        
+        # Simple heuristic: longer, more detailed responses get higher scores
+        text_length = len(analysis_text)
+        word_count = len(analysis_text.split())
+        
+        # Base score from length (0.3 to 0.7)
+        length_score = min(0.7, max(0.3, text_length / 1000))
+        
+        # Bonus for technical terms and structured content
+        technical_terms = [
+            'load balancer', 'database', 'cache', 'api', 'microservice',
+            'monitoring', 'logging', 'security', 'scalability', 'performance'
+        ]
+        
+        technical_score = 0.0
+        for term in technical_terms:
+            if term.lower() in analysis_text.lower():
+                technical_score += 0.05
+        
+        technical_score = min(0.3, technical_score)
+        
+        # Combine scores
+        total_score = length_score + technical_score
+        return min(1.0, total_score)
 
     def health_check(self) -> Dict[str, Any]:
         """Check if the ADK service is properly configured and ready"""

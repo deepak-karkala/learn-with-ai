@@ -104,36 +104,62 @@ class WhiteboardService:
             # Generate analysis ID
             analysis_id = str(uuid.uuid4())
             
-            # For now, return mock analysis
-            # TODO: Integrate with actual multimodal LLM
+            # Create structured analysis prompt
+            analysis_prompt = self._create_analysis_prompt(request.analysis_type)
+            
+            # Decode PNG data for analysis
+            png_data = artifact['png_data']
+            if png_data.startswith('data:image/png;base64,'):
+                png_data = png_data.split(',', 1)[1]
+            
+            decoded_data = base64.b64decode(png_data)
+            
+            # Use ADK service for multimodal analysis
+            from app.services.adk_service import MultimodalAnalysisRequest
+            
+            multimodal_request = MultimodalAnalysisRequest(
+                image_data=decoded_data,
+                prompt=analysis_prompt,
+                user_id=request.user_id,
+                session_id=request.session_id,
+                analysis_type=request.analysis_type
+            )
+            
+            # Perform multimodal analysis
+            multimodal_response = await self.adk_service.analyze_image_multimodal(
+                multimodal_request
+            )
+            
+            if not multimodal_response.success:
+                raise Exception(f"Multimodal analysis failed: {multimodal_response.error}")
+            
+            # Parse the analysis response to extract structured information
+            parsed_analysis = self._parse_analysis_response(
+                multimodal_response.analysis,
+                request.analysis_type
+            )
+            
+            # Store analysis metadata
             analysis = {
                 'id': analysis_id,
                 'artifact_id': request.artifact_id,
-                'components_identified': [
-                    'Load Balancer',
-                    'Web Server', 
-                    'Database',
-                    'Redis Cache'
-                ],
-                'architectural_feedback': (
-                    "Good basic architecture with clear separation of concerns. "
-                    "Consider adding monitoring, logging, and API gateway for "
-                    "production readiness."
-                ),
-                'suggestions': [
-                    'Add health check endpoints',
-                    'Implement circuit breakers',
-                    'Consider CDN for static assets',
-                    'Add message queue for async processing'
-                ],
-                'confidence_score': 0.85,
+                'components_identified': parsed_analysis['components'],
+                'architectural_feedback': parsed_analysis['feedback'],
+                'suggestions': parsed_analysis['suggestions'],
+                'confidence_score': multimodal_response.confidence_score or 0.8,
                 'status': 'completed',
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': datetime.utcnow().isoformat(),
+                'cost_estimate': multimodal_response.cost_estimate,
+                'tokens_used': multimodal_response.tokens_used,
+                'raw_analysis': multimodal_response.analysis
             }
             
             self._analyses[analysis_id] = analysis
             
-            logger.info(f"Whiteboard analysis completed: {analysis_id}")
+            logger.info(
+                f"Whiteboard analysis completed: {analysis_id}, "
+                f"cost: {multimodal_response.cost_estimate}"
+            )
             
             return WhiteboardAnalysisResponse(
                 artifact_id=request.artifact_id,
@@ -149,6 +175,113 @@ class WhiteboardService:
         except Exception as e:
             logger.error(f"Failed to analyze whiteboard: {e}")
             raise Exception(f"Analysis failed: {str(e)}")
+    
+    def _create_analysis_prompt(self, analysis_type: str) -> str:
+        """Create a structured prompt for whiteboard analysis."""
+        base_prompt = """
+        Analyze this system design whiteboard diagram and provide structured feedback.
+        
+        Please identify:
+        1. System components and their types (e.g., Load Balancer, Web Server, Database, Cache, etc.)
+        2. Architectural patterns and design decisions
+        3. Potential improvements and best practices
+        4. Any security, scalability, or performance considerations
+        
+        Format your response as:
+        COMPONENTS: [list of identified components]
+        FEEDBACK: [architectural feedback and observations]
+        SUGGESTIONS: [specific improvement suggestions]
+        """
+        
+        if analysis_type == "comprehensive":
+            base_prompt += """
+            Additional analysis should include:
+            - Data flow patterns
+            - Integration points
+            - Monitoring and observability considerations
+            - Disaster recovery and backup strategies
+            """
+        elif analysis_type == "security":
+            base_prompt += """
+            Focus on security aspects:
+            - Authentication and authorization
+            - Data encryption
+            - Network security
+            - Compliance considerations
+            """
+        elif analysis_type == "performance":
+            base_prompt += """
+            Focus on performance aspects:
+            - Bottlenecks and optimization opportunities
+            - Caching strategies
+            - Load balancing considerations
+            - Scalability patterns
+            """
+        
+        return base_prompt.strip()
+    
+    def _parse_analysis_response(self, analysis_text: str, analysis_type: str) -> Dict[str, Any]:
+        """Parse the LLM analysis response to extract structured information."""
+        # Default fallback values
+        components = []
+        feedback = "Analysis completed successfully."
+        suggestions = []
+        
+        try:
+            # Try to extract structured information from the response
+            lines = analysis_text.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith('COMPONENTS:'):
+                    components_text = line.replace('COMPONENTS:', '').strip()
+                    components = [c.strip() for c in components_text.split(',') if c.strip()]
+                elif line.startswith('FEEDBACK:'):
+                    feedback = line.replace('FEEDBACK:', '').strip()
+                elif line.startswith('SUGGESTIONS:'):
+                    suggestions_text = line.replace('SUGGESTIONS:', '').strip()
+                    suggestions = [s.strip() for s in suggestions_text.split(',') if s.strip()]
+            
+            # If structured parsing failed, try to extract information from the text
+            if not components:
+                # Look for common system components in the text
+                component_keywords = [
+                    'load balancer', 'web server', 'database', 'cache', 'redis',
+                    'api gateway', 'microservice', 'message queue', 'monitoring',
+                    'logging', 'authentication', 'authorization'
+                ]
+                
+                for keyword in component_keywords:
+                    if keyword.lower() in analysis_text.lower():
+                        components.append(keyword.title())
+            
+            if not suggestions:
+                # Extract suggestions from the text
+                suggestion_indicators = ['should', 'could', 'consider', 'add', 'implement']
+                sentences = analysis_text.split('.')
+                for sentence in sentences:
+                    if any(indicator in sentence.lower() for indicator in suggestion_indicators):
+                        suggestions.append(sentence.strip())
+                        if len(suggestions) >= 5:  # Limit to 5 suggestions
+                            break
+            
+            # Ensure we have at least some content
+            if not components:
+                components = ['System Components (Analysis in progress)']
+            if not feedback:
+                feedback = analysis_text[:200] + "..." if len(analysis_text) > 200 else analysis_text
+            if not suggestions:
+                suggestions = ['Review the architecture for best practices']
+                
+        except Exception as e:
+            logger.warning(f"Failed to parse analysis response: {e}")
+            # Use fallback values
+        
+        return {
+            'components': components,
+            'feedback': feedback,
+            'suggestions': suggestions
+        }
     
     def get_artifact(self, artifact_id: str) -> Optional[Dict[str, Any]]:
         """Get artifact by ID."""

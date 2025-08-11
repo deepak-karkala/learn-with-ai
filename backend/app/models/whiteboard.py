@@ -73,12 +73,17 @@ class WhiteboardAnalysisRequest(BaseModel):
 
 class WhiteboardAnalysisResponse(BaseModel):
     """Response model for whiteboard analysis"""
-    
+
     artifact_id: str = Field(..., description="PNG artifact identifier")
     analysis_id: str = Field(..., description="Analysis identifier")
     components_identified: list = Field(..., description="List of system components identified")
-    architectural_feedback: str = Field(..., description="Architectural feedback and suggestions")
+    architectural_feedback: str = Field(
+        ..., description="Architectural feedback and suggestions"
+    )
     suggestions: list = Field(..., description="List of improvement suggestions")
     confidence_score: float = Field(..., description="Confidence score (0.0 to 1.0)")
     status: str = Field(..., description="Analysis status")
     created_at: str = Field(..., description="Analysis timestamp")
+    cost_estimate: Optional[float] = Field(None, description="Estimated cost of analysis")
+    tokens_used: Optional[int] = Field(None, description="Number of tokens used")
+    raw_analysis: Optional[str] = Field(None, description="Raw LLM analysis text")

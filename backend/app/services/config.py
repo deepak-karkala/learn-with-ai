@@ -30,6 +30,18 @@ class Settings(BaseSettings):
 
     # ADK Agent Configuration
     adk_model_name: str = "gemini-2.0-flash-exp"
+    
+    # Multimodal Analysis Configuration
+    multimodal_model_name: str = "gemini-2.0-flash-exp"
+    multimodal_analysis_timeout: float = 60.0
+    multimodal_max_tokens: int = 4000
+    multimodal_temperature: float = 0.1
+    
+    # Cost Tracking Configuration
+    enable_cost_tracking: bool = True
+    multimodal_cost_per_1k_tokens: float = 0.0025  # Gemini 2.0
+    multimodal_cost_per_image: float = 0.0025      # Per image analysis
+    
     # Timeout for streaming responses in seconds
     adk_streaming_timeout: float = 30.0
     # Maximum events to process per request
@@ -102,6 +114,13 @@ def get_settings() -> Settings:
             google_cloud_project=None,
             google_cloud_location="us-central1",
             adk_model_name="gemini-2.0-flash-exp",
+            multimodal_model_name="gemini-2.0-flash-exp",
+            multimodal_analysis_timeout=60.0,
+            multimodal_max_tokens=4000,
+            multimodal_temperature=0.1,
+            enable_cost_tracking=True,
+            multimodal_cost_per_1k_tokens=0.0025,
+            multimodal_cost_per_image=0.0025,
             adk_streaming_timeout=30.0,
             adk_max_events=100,
             adk_max_connections=10,

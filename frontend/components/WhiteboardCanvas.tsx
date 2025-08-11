@@ -21,7 +21,8 @@ import {
     RotateCw,
     Plus,
     Move,
-    Link
+    Link,
+    Target
 } from 'lucide-react'
 
 export interface SystemBlock {
@@ -157,6 +158,10 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
     const [selectedTool, setSelectedTool] = useState<'select' | 'connect'>('select')
     const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null)
+    const [isLoading, setIsLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [analysisResult, setAnalysisResult] = useState<any>(null)
+    const [isAnalyzing, setIsAnalyzing] = useState(false)
 
     // Initialize canvas
     // Keep a ref to the latest draw function so resize callbacks can repaint immediately
@@ -558,6 +563,105 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
         setMousePos(null)
     }
 
+    const handleWhiteboardSave = async (pngData: string) => {
+        try {
+            setIsLoading(true)
+            const response = await fetch('/api/whiteboard/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    png_data: pngData,
+                    user_id: 'web_user',
+                    session_id: undefined,
+                    description: 'System design whiteboard diagram'
+                }),
+            })
+            if (!response.ok) {
+                let errText = `Upload failed (${response.status})`
+                try { const errJson = await response.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
+                throw new Error(errText)
+            }
+            const data = await response.json()
+            console.log('PNG uploaded successfully:', data.artifact_id)
+            alert(`Whiteboard saved successfully! Artifact ID: ${data.artifact_id}`)
+        } catch (error) {
+            console.error('Failed to upload PNG:', error)
+            alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleAnalyzeWhiteboard = async () => {
+        if (blocks.length === 0) {
+            setError('Please add some components to analyze')
+            return
+        }
+
+        try {
+            setIsAnalyzing(true)
+            setError(null)
+            setAnalysisResult(null)
+
+            // Convert canvas to PNG
+            const canvas = document.querySelector('canvas')
+            if (!canvas) {
+                throw new Error('Canvas not found')
+            }
+
+            const pngData = canvas.toDataURL('image/png')
+
+            // Upload PNG first
+            const uploadResponse = await fetch('/api/whiteboard/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    png_data: pngData,
+                    user_id: 'web_user',
+                    session_id: undefined,
+                    description: 'System design whiteboard diagram for analysis'
+                }),
+            })
+
+            if (!uploadResponse.ok) {
+                let errText = `Upload failed (${uploadResponse.status})`
+                try { const errJson = await uploadResponse.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
+                throw new Error(errText)
+            }
+
+            const uploadData = await uploadResponse.json()
+            const artifactId = uploadData.artifact_id
+
+            // Now analyze the uploaded PNG
+            const analysisResponse = await fetch('/api/whiteboard/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    artifact_id: artifactId,
+                    user_id: 'web_user',
+                    session_id: undefined,
+                    analysis_type: 'comprehensive'
+                }),
+            })
+
+            if (!analysisResponse.ok) {
+                let errText = `Analysis failed (${analysisResponse.status})`
+                try { const errJson = await analysisResponse.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
+                throw new Error(errText)
+            }
+
+            const analysisData = await analysisResponse.json()
+            setAnalysisResult(analysisData)
+            console.log('Analysis completed:', analysisData)
+
+        } catch (error) {
+            console.error('Failed to analyze whiteboard:', error)
+            setError(error instanceof Error ? error.message : 'Unknown error')
+        } finally {
+            setIsAnalyzing(false)
+        }
+    }
+
     return (
         <div className={`flex flex-col h-full ${className}`}>
             {/* Toolbar */}
@@ -626,6 +730,20 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
                         >
                             <Download className="w-4 h-4" />
                             Save PNG
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAnalyzeWhiteboard}
+                            disabled={isAnalyzing || blocks.length === 0}
+                            className="flex items-center gap-2"
+                        >
+                            {isAnalyzing ? (
+                                <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+                            ) : (
+                                <Target className="w-4 h-4" />
+                            )}
+                            {isAnalyzing ? 'Analyzing...' : 'Analyze Design'}
                         </Button>
                         {selectedBlock && (
                             <Button
@@ -704,6 +822,59 @@ export default function WhiteboardCanvas({ onSave, className = '' }: WhiteboardC
                     </div>
                 )}
             </div>
+
+            {/* Analysis Results */}
+            {error && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-800 text-sm">Error: {error}</p>
+                </div>
+            )}
+
+            {analysisResult && (
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-3">Design Analysis Results</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <h4 className="font-medium text-blue-800 mb-2">Components Identified</h4>
+                            <ul className="text-sm text-blue-700 space-y-1">
+                                {analysisResult.components_identified?.map((component: string, index: number) => (
+                                    <li key={index} className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                        {component}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h4 className="font-medium text-blue-800 mb-2">Architectural Feedback</h4>
+                            <p className="text-sm text-blue-700">{analysisResult.architectural_feedback}</p>
+                        </div>
+
+                        <div>
+                            <h4 className="font-medium text-blue-800 mb-2">Suggestions</h4>
+                            <ul className="text-sm text-blue-700 space-y-1">
+                                {analysisResult.suggestions?.map((suggestion: string, index: number) => (
+                                    <li key={index} className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                        {suggestion}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-blue-200">
+                        <div className="flex items-center justify-between text-sm text-blue-600">
+                            <span>Confidence Score: {(analysisResult.confidence_score * 100).toFixed(1)}%</span>
+                            {analysisResult.cost_estimate && (
+                                <span>Estimated Cost: ${analysisResult.cost_estimate.toFixed(4)}</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

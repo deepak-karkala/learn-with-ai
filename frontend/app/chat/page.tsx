@@ -116,13 +116,46 @@ export default function ChatPage() {
         }
     }
 
-    const handleWhiteboardSave = (pngData: string) => {
-        // For now, just log the PNG data
-        // In the future, this will be sent to the backend for analysis
-        console.log('Whiteboard saved:', pngData.substring(0, 100) + '...')
+    const handleWhiteboardSave = async (pngData: string) => {
+        try {
+            // Show loading state
+            setIsLoading(true)
 
-        // You could also show a success message to the user
-        alert('Whiteboard saved successfully! PNG data ready for analysis.')
+            // Upload PNG to backend
+            const response = await fetch('/api/whiteboard/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    png_data: pngData,
+                    user_id: mockUser.email || 'web_user',
+                    session_id: sessionId || undefined,
+                    description: 'System design whiteboard diagram'
+                }),
+            })
+
+            if (!response.ok) {
+                let errText = `Upload failed (${response.status})`
+                try {
+                    const errJson = await response.json()
+                    errText = errJson?.detail || errJson?.message || errText
+                } catch (_) { }
+                throw new Error(errText)
+            }
+
+            const data = await response.json()
+            console.log('PNG uploaded successfully:', data.artifact_id)
+
+            // Show success message
+            alert(`Whiteboard saved successfully! Artifact ID: ${data.artifact_id}`)
+
+        } catch (error) {
+            console.error('Failed to upload PNG:', error)
+            alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        } finally {
+            setIsLoading(false)
+        }
     }
 
     if (!isAuthenticated) {

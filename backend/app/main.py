@@ -18,6 +18,13 @@ from app.services.adk_service import (
     SessionCreateRequest,
     SessionCreateResponse
 )
+from app.services.whiteboard_service import WhiteboardService
+from app.models.whiteboard import (
+    PNGUploadRequest,
+    PNGUploadResponse,
+    WhiteboardAnalysisRequest,
+    WhiteboardAnalysisResponse
+)
 from app.services.config import settings, setup_logging
 
 # Load environment variables
@@ -28,6 +35,7 @@ setup_logging(settings)
 
 # ADK service will be initialized properly with dependency injection
 adk_service: Optional[ADKService] = None
+whiteboard_service: Optional[WhiteboardService] = None
 
 # Rate limiting storage
 rate_limit_storage = defaultdict(list)
@@ -117,19 +125,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown
     for proper resource management
     """
-    global adk_service
+    global adk_service, whiteboard_service
 
     # Startup
     try:
         adk_service = ADKService()
+        whiteboard_service = WhiteboardService(adk_service)
         yield
     except Exception as e:
         # Log startup error but don't crash the app
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.error(f"Failed to initialize ADK service: {e}")
+        logger.error(f"Failed to initialize services: {e}")
         adk_service = None
+        whiteboard_service = None
         yield
     finally:
         # Shutdown - cleanup resources
@@ -368,6 +378,73 @@ async def get_session_info(user_id: str, session_id: str) -> dict:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get session info: {str(e)}",
+        )
+
+
+# Whiteboard API endpoints
+@app.post("/api/whiteboard/upload")
+async def upload_whiteboard_png(request: PNGUploadRequest) -> PNGUploadResponse:
+    """
+    Upload PNG data from whiteboard canvas.
+    
+    Args:
+        request: PNG upload request with base64 data
+        
+    Returns:
+        PNG upload response with artifact ID
+    """
+    try:
+        if whiteboard_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Whiteboard service is not available",
+            )
+        
+        response = await whiteboard_service.upload_png(request)
+        return response
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Failed to upload PNG: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload PNG: {str(e)}",
+        )
+
+
+@app.post("/api/whiteboard/analyze")
+async def analyze_whiteboard(
+    request: WhiteboardAnalysisRequest
+) -> WhiteboardAnalysisResponse:
+    """
+    Analyze whiteboard PNG using multimodal LLM.
+    
+    Args:
+        request: Analysis request with artifact ID
+        
+    Returns:
+        Analysis response with feedback and suggestions
+    """
+    try:
+        if whiteboard_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Whiteboard service is not available",
+            )
+        
+        response = await whiteboard_service.analyze_whiteboard(request)
+        return response
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Failed to analyze whiteboard: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze whiteboard: {str(e)}",
         )
 
 

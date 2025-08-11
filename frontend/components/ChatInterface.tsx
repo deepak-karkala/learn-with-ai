@@ -119,7 +119,12 @@ export function ChatInterface({
                     <Card className={`${isUser ? 'bg-blue-600 text-white' : 'bg-gray-50'}`}>
                         <CardContent className="p-3">
                             <div className="flex items-start justify-between gap-2">
-                                <p className="text-sm leading-relaxed">{message.content}</p>
+                                <p
+                                    className="text-sm leading-relaxed"
+                                    {...(!isUser ? { 'data-testid': 'ai-response' } : {})}
+                                >
+                                    {message.content}
+                                </p>
                                 <span className={`text-xs ${isUser ? 'text-blue-100' : 'text-gray-500'}`}>
                                     {formatTimestamp(message.timestamp)}
                                 </span>
@@ -248,11 +253,13 @@ export function ChatInterface({
                             disabled={isLoading || isSubmitting}
                             className="flex-1"
                             aria-label="Type your message"
+                            data-testid="message-input"
                         />
                         <Button
                             type="submit"
                             disabled={!inputValue.trim() || isLoading || isSubmitting}
                             className="px-6"
+                            data-testid="send-button"
                         >
                             <Send className="w-4 h-4 mr-2" />
                             Send

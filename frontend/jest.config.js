@@ -16,6 +16,7 @@ const customJestConfig = {
     '**/__tests__/**/*.(ts|tsx|js)',
     '**/*.(test|spec).(ts|tsx|js)'
   ],
+  testPathIgnorePatterns: ['<rootDir>/tests-e2e/'],
   globals: {
     'ts-jest': {
       tsconfig: 'tsconfig.test.json'

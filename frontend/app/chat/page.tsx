@@ -29,10 +29,9 @@ export default function ChatPage() {
     const [error, setError] = useState<string | null>(null)
     const [isTyping, setIsTyping] = useState(false)
     const [sessionId, setSessionId] = useState<string | null>(null)
+    const sessionStorageKey = `sessionId:${mockUser.email}`
 
-    const apiBase =
-        process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ||
-        'http://localhost:8000'
+    // Use relative API routes; Next.js/Vercel rewrites handle proxying to backend
 
     // Mock authentication check
     useEffect(() => {
@@ -42,6 +41,17 @@ export default function ChatPage() {
         }, 1000)
 
         return () => clearTimeout(checkAuth)
+    }, [])
+
+    // Load persisted session id on mount
+    useEffect(() => {
+        try {
+            const stored = window.localStorage.getItem(sessionStorageKey)
+            if (stored) {
+                setSessionId(stored)
+            }
+        } catch (_) { }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const handleSendMessage = async (message: string) => {
@@ -60,7 +70,7 @@ export default function ChatPage() {
 
         try {
             // Call backend chat API
-            const resp = await fetch(`${apiBase}/api/chat`, {
+            const resp = await fetch(`/api/chat`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -84,6 +94,9 @@ export default function ChatPage() {
             const data = await resp.json()
             if (data?.session_id && data.session_id !== sessionId) {
                 setSessionId(data.session_id)
+                try {
+                    window.localStorage.setItem(sessionStorageKey, data.session_id)
+                } catch (_) { }
             }
 
             const assistantMessage: Message = {

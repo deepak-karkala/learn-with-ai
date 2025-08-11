@@ -1,0 +1,391 @@
+import React from 'react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import '@testing-library/jest-dom'
+import WhiteboardCanvas from '../components/WhiteboardCanvas'
+
+// Mock canvas methods
+const mockCanvas = {
+    getContext: jest.fn(() => ({
+        clearRect: jest.fn(),
+        fillRect: jest.fn(),
+        strokeRect: jest.fn(),
+        beginPath: jest.fn(),
+        moveTo: jest.fn(),
+        lineTo: jest.fn(),
+        stroke: jest.fn(),
+        fillText: jest.fn(),
+        toDataURL: jest.fn(() => 'data:image/png;base64,mock-png-data'),
+    })),
+    width: 800,
+    height: 600,
+    offsetWidth: 800,
+    offsetHeight: 600,
+    getBoundingClientRect: jest.fn(() => ({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 600,
+    })),
+    toDataURL: jest.fn(() => 'data:image/png;base64,mock-png-data'),
+}
+
+// Mock HTMLCanvasElement
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    value: mockCanvas.getContext,
+})
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
+    value: mockCanvas.toDataURL,
+})
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'getBoundingClientRect', {
+    value: mockCanvas.getBoundingClientRect,
+})
+
+describe('WhiteboardCanvas', () => {
+    beforeEach(() => {
+        jest.clearAllMocks()
+    })
+
+    describe('Component Rendering', () => {
+        it('renders whiteboard canvas with toolbar', () => {
+            render(<WhiteboardCanvas />)
+
+            expect(screen.getByText('System Design Whiteboard')).toBeInTheDocument()
+            expect(screen.getByText('Select')).toBeInTheDocument()
+            expect(screen.getByText('Connect')).toBeInTheDocument()
+            expect(screen.getByText('Load Balancer')).toBeInTheDocument()
+            expect(screen.getByText('Web Server')).toBeInTheDocument()
+            expect(screen.getByText('Database')).toBeInTheDocument()
+            expect(screen.getByText('Redis Cache')).toBeInTheDocument()
+        })
+
+        it('displays all system design block types', () => {
+            render(<WhiteboardCanvas />)
+
+            const expectedBlocks = [
+                'Load Balancer',
+                'Web Server',
+                'Database',
+                'Redis Cache',
+                'API Gateway',
+                'CDN',
+                'Message Queue',
+                'Cache',
+                'Monitoring',
+                'Logging'
+            ]
+
+            expectedBlocks.forEach(block => {
+                expect(screen.getByText(block)).toBeInTheDocument()
+            })
+        })
+
+        it('shows canvas area', () => {
+            render(<WhiteboardCanvas />)
+
+            // Canvas element should be present
+            const canvas = document.querySelector('canvas')
+            expect(canvas).toBeInTheDocument()
+        })
+    })
+
+    describe('Tool Selection', () => {
+        it('defaults to select tool', () => {
+            render(<WhiteboardCanvas />)
+
+            const selectButton = screen.getByText('Select')
+            const connectButton = screen.getByText('Connect')
+
+            expect(selectButton).toHaveClass('bg-primary')
+            // The connect button should have the default button styling (not bg-secondary)
+            expect(connectButton).not.toHaveClass('bg-primary')
+        })
+
+        it('switches to connect tool when clicked', () => {
+            render(<WhiteboardCanvas />)
+
+            const connectButton = screen.getByText('Connect')
+            fireEvent.click(connectButton)
+
+            expect(connectButton).toHaveClass('bg-primary')
+            expect(screen.getByText('Select')).not.toHaveClass('bg-primary')
+        })
+
+        it('shows appropriate status message for each tool', () => {
+            render(<WhiteboardCanvas />)
+
+            // Default select tool should be active
+            expect(screen.getByText('Select')).toHaveClass('bg-primary')
+
+            // Switch to connect tool
+            fireEvent.click(screen.getByText('Connect'))
+            expect(screen.getByText('Connect')).toHaveClass('bg-primary')
+            expect(screen.getByText('Select')).not.toHaveClass('bg-primary')
+
+            // Verify tool switching works
+            fireEvent.click(screen.getByText('Select'))
+            expect(screen.getByText('Select')).toHaveClass('bg-primary')
+            expect(screen.getByText('Connect')).not.toHaveClass('bg-primary')
+        })
+    })
+
+    describe('Block Management', () => {
+        it('adds blocks when block type buttons are clicked', () => {
+            render(<WhiteboardCanvas />)
+
+            const loadBalancerButton = screen.getByText('Load Balancer')
+            fireEvent.click(loadBalancerButton)
+
+            // Check that block count increases
+            expect(screen.getByText('Blocks: 1')).toBeInTheDocument()
+        })
+
+        it('adds multiple blocks of different types', () => {
+            render(<WhiteboardCanvas />)
+
+            fireEvent.click(screen.getByText('Load Balancer'))
+            fireEvent.click(screen.getByText('Web Server'))
+            fireEvent.click(screen.getByText('Database'))
+
+            expect(screen.getByText('Blocks: 3')).toBeInTheDocument()
+        })
+
+        it('clears all blocks when clear button is clicked', () => {
+            render(<WhiteboardCanvas />)
+
+            // Add some blocks
+            fireEvent.click(screen.getByText('Load Balancer'))
+            fireEvent.click(screen.getByText('Web Server'))
+            expect(screen.getByText('Blocks: 2')).toBeInTheDocument()
+
+            // Clear canvas
+            fireEvent.click(screen.getByText('Clear'))
+            expect(screen.getByText('Blocks: 0')).toBeInTheDocument()
+        })
+    })
+
+    describe('Block Selection and Deletion', () => {
+        it('shows delete button only when block is selected', () => {
+            render(<WhiteboardCanvas />)
+
+            // Initially no delete button
+            expect(screen.queryByText('Delete Block')).not.toBeInTheDocument()
+
+            // Add a block
+            fireEvent.click(screen.getByText('Load Balancer'))
+
+            // Still no delete button (no block selected)
+            expect(screen.queryByText('Delete Block')).not.toBeInTheDocument()
+        })
+
+        it('deletes selected block when delete button is clicked', () => {
+            render(<WhiteboardCanvas />)
+
+            // Add a block
+            fireEvent.click(screen.getByText('Load Balancer'))
+            expect(screen.getByText('Blocks: 1')).toBeInTheDocument()
+
+            // Note: In a real test environment, we'd need to simulate clicking on the canvas
+            // to select a block. For now, we'll test the delete functionality separately.
+        })
+    })
+
+    describe('Canvas Operations', () => {
+        it('initializes canvas with proper dimensions', () => {
+            render(<WhiteboardCanvas />)
+
+            // Canvas should be initialized and present in the DOM
+            const canvas = document.querySelector('canvas')
+            expect(canvas).toBeInTheDocument()
+        })
+
+        it('handles canvas click events', () => {
+            render(<WhiteboardCanvas />)
+
+            const canvas = document.querySelector('canvas')
+            expect(canvas).toBeInTheDocument()
+
+            if (canvas) {
+                // Simulate canvas click
+                fireEvent.click(canvas, { clientX: 100, clientY: 100 })
+
+                // Canvas click handler should be called
+                expect(canvas).toBeInTheDocument()
+            }
+        })
+
+        it('handles mouse events for dragging', () => {
+            render(<WhiteboardCanvas />)
+
+            const canvas = document.querySelector('canvas')
+            expect(canvas).toBeInTheDocument()
+
+            if (canvas) {
+                // Simulate mouse events
+                fireEvent.mouseDown(canvas, { clientX: 100, clientY: 100 })
+                fireEvent.mouseMove(canvas, { clientX: 150, clientY: 150 })
+                fireEvent.mouseUp(canvas)
+
+                // Mouse event handlers should be attached
+                expect(canvas).toBeInTheDocument()
+            }
+        })
+    })
+
+    describe('PNG Export Functionality', () => {
+        it('calls onSave callback when save button is clicked', async () => {
+            const mockOnSave = jest.fn()
+            render(<WhiteboardCanvas onSave={mockOnSave} />)
+
+            const saveButton = screen.getByText('Save PNG')
+            fireEvent.click(saveButton)
+
+            await waitFor(() => {
+                expect(mockOnSave).toHaveBeenCalledWith('data:image/png;base64,mock-png-data')
+            })
+        })
+
+        it('generates PNG data when save is triggered', () => {
+            render(<WhiteboardCanvas />)
+
+            const saveButton = screen.getByText('Save PNG')
+            fireEvent.click(saveButton)
+
+            // Canvas toDataURL should be called
+            expect(mockCanvas.toDataURL).toHaveBeenCalledWith('image/png')
+        })
+    })
+
+    describe('Status Display', () => {
+        it('shows block count', () => {
+            render(<WhiteboardCanvas />)
+
+            expect(screen.getByText('Blocks: 0')).toBeInTheDocument()
+        })
+
+        it('shows connection count', () => {
+            render(<WhiteboardCanvas />)
+
+            expect(screen.getByText('Connections: 0')).toBeInTheDocument()
+        })
+
+        it('updates counts when blocks are added', () => {
+            render(<WhiteboardCanvas />)
+
+            fireEvent.click(screen.getByText('Load Balancer'))
+            fireEvent.click(screen.getByText('Web Server'))
+
+            expect(screen.getByText('Blocks: 2')).toBeInTheDocument()
+        })
+    })
+
+    describe('Block Types and Icons', () => {
+        it('displays correct icons for each block type', () => {
+            render(<WhiteboardCanvas />)
+
+            // Check that icon components are rendered
+            const loadBalancerButton = screen.getByText('Load Balancer')
+            const webServerButton = screen.getByText('Web Server')
+            const databaseButton = screen.getByText('Database')
+
+            expect(loadBalancerButton).toBeInTheDocument()
+            expect(webServerButton).toBeInTheDocument()
+            expect(databaseButton).toBeInTheDocument()
+        })
+
+        it('has consistent button styling for all block types', () => {
+            render(<WhiteboardCanvas />)
+
+            const blockButtons = screen.getAllByRole('button').filter(button =>
+                ['Load Balancer', 'Web Server', 'Database', 'Redis Cache'].includes(button.textContent || '')
+            )
+
+            blockButtons.forEach(button => {
+                // Block type buttons should have the default button styling (bg-background)
+                expect(button).toHaveClass('bg-background')
+            })
+        })
+    })
+
+    describe('Responsive Design', () => {
+        it('renders with proper layout structure', () => {
+            render(<WhiteboardCanvas />)
+
+            // Check that the component has the expected structure
+            expect(screen.getByText('System Design Whiteboard')).toBeInTheDocument()
+            expect(document.querySelector('canvas')).toBeInTheDocument()
+            expect(screen.getByText('Blocks: 0')).toBeInTheDocument()
+        })
+
+        it('handles different screen sizes gracefully', () => {
+            // This would require more sophisticated testing with different viewport sizes
+            // For now, we'll verify the component renders without errors
+            render(<WhiteboardCanvas />)
+
+            expect(screen.getByText('System Design Whiteboard')).toBeInTheDocument()
+        })
+    })
+
+    describe('Error Handling', () => {
+        it('handles canvas context errors gracefully', () => {
+            // Mock canvas context failure
+            const mockGetContext = jest.fn(() => null)
+            Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+                value: mockGetContext,
+            })
+
+            // Component should render without crashing
+            render(<WhiteboardCanvas />)
+            expect(screen.getByText('System Design Whiteboard')).toBeInTheDocument()
+        })
+
+        it('handles save errors gracefully', () => {
+            // Mock save failure
+            const mockToDataURL = jest.fn(() => {
+                throw new Error('Save failed')
+            })
+            Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
+                value: mockToDataURL,
+            })
+
+            render(<WhiteboardCanvas />)
+
+            const saveButton = screen.getByText('Save PNG')
+            fireEvent.click(saveButton)
+
+            // Component should not crash
+            expect(screen.getByText('System Design Whiteboard')).toBeInTheDocument()
+        })
+    })
+
+    describe('Accessibility', () => {
+        it('has proper button labels and roles', () => {
+            render(<WhiteboardCanvas />)
+
+            const buttons = screen.getAllByRole('button')
+            buttons.forEach(button => {
+                // Each button should have either aria-label or text content
+                const hasAriaLabel = button.hasAttribute('aria-label')
+                const hasTextContent = button.textContent && button.textContent.trim().length > 0
+                expect(hasAriaLabel || hasTextContent).toBe(true)
+            })
+        })
+
+        it('provides visual feedback for selected tools', () => {
+            render(<WhiteboardCanvas />)
+
+            const selectButton = screen.getByText('Select')
+            const connectButton = screen.getByText('Connect')
+
+            // Initially select is active
+            expect(selectButton).toHaveClass('bg-primary')
+            expect(connectButton).not.toHaveClass('bg-primary')
+
+            // Click connect to activate it
+            fireEvent.click(connectButton)
+            expect(connectButton).toHaveClass('bg-primary')
+            expect(selectButton).not.toHaveClass('bg-primary')
+        })
+    })
+})

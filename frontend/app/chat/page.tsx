@@ -6,7 +6,9 @@ import { AuthUI } from '../../components/AuthUI'
 import { Badge } from '../../components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
-import { BookOpen, Target, TrendingUp, Clock } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
+import { BookOpen, Target, TrendingUp, Clock, MessageSquare, Palette } from 'lucide-react'
+import WhiteboardCanvas from '../../components/WhiteboardCanvas'
 
 // Mock user data - in real app this would come from authentication service
 const mockUser = {
@@ -29,6 +31,7 @@ export default function ChatPage() {
     const [error, setError] = useState<string | null>(null)
     const [isTyping, setIsTyping] = useState(false)
     const [sessionId, setSessionId] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState('chat')
     const sessionStorageKey = `sessionId:${mockUser.email}`
 
     // Use relative API routes; Next.js/Vercel rewrites handle proxying to backend
@@ -113,6 +116,15 @@ export default function ChatPage() {
         }
     }
 
+    const handleWhiteboardSave = (pngData: string) => {
+        // For now, just log the PNG data
+        // In the future, this will be sent to the backend for analysis
+        console.log('Whiteboard saved:', pngData.substring(0, 100) + '...')
+
+        // You could also show a success message to the user
+        alert('Whiteboard saved successfully! PNG data ready for analysis.')
+    }
+
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -179,15 +191,49 @@ export default function ChatPage() {
                 </Card>
             </div>
 
-            {/* Main Chat Interface */}
+            {/* Main Content with Tabs */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-                <ChatInterface
-                    messages={messages}
-                    onSendMessage={handleSendMessage}
-                    isLoading={isLoading}
-                    error={error}
-                    isTyping={isTyping}
-                />
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 mb-6">
+                        <TabsTrigger value="chat" className="flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4" />
+                            Chat with AI
+                        </TabsTrigger>
+                        <TabsTrigger value="whiteboard" className="flex items-center gap-2">
+                            <Palette className="w-4 h-4" />
+                            System Design Whiteboard
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="chat" className="space-y-4">
+                        <ChatInterface
+                            messages={messages}
+                            onSendMessage={handleSendMessage}
+                            isLoading={isLoading}
+                            error={error}
+                            isTyping={isTyping}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="whiteboard" className="space-y-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <Palette className="w-5 h-5 text-blue-600" />
+                                    Design Your System Architecture
+                                </CardTitle>
+                                <p className="text-sm text-gray-600">
+                                    Use the whiteboard to create system design diagrams. Add components, connect them, and save your design for AI analysis.
+                                </p>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="h-[600px]">
+                                    <WhiteboardCanvas onSave={handleWhiteboardSave} />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
             </div>
         </div>
     )

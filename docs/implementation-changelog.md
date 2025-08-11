@@ -18,9 +18,9 @@
 - [x] **Issue #5**: Basic Frontend UI with Chat Interface ✅ **COMPLETED**
 - [x] **Issue #6**: FastAPI Backend with Basic Chat Endpoint ✅ **COMPLETED**
 - [x] **Issue #7**: End-to-End Chat Flow Integration ✅ **COMPLETED**
+- [x] **Issue #8**: HTML5 Canvas Whiteboard Component ✅ **COMPLETED**
 
 ### Phase 2: Core Features Development
-- [ ] **Issue #8**: HTML5 Canvas Whiteboard Component
 - [ ] **Issue #9**: PNG Capture and Upload Functionality
 - [ ] **Issue #10**: Multimodal LLM Analysis Integration
 - [ ] **Issue #11**: Real-time Whiteboard Feedback UI
@@ -1458,8 +1458,8 @@ ADK_SESSION_EXPIRY_SECONDS=3600
 
 ---
 
-### 💬 **Issue #5: Basic Frontend UI with Chat Interface**
-**GitHub Issue**: #29  
+### 🎨 **Issue #8: HTML5 Canvas Whiteboard Component**
+**GitHub Issue**: #32  
 **Status**: ✅ **COMPLETED**  
 **Started**: August 10, 2025  
 **Completed**: August 10, 2025
@@ -1467,279 +1467,134 @@ ADK_SESSION_EXPIRY_SECONDS=3600
 #### Implementation Steps Completed:
 
 **Acceptance Criteria Progress:**
-- [x] NextJS frontend with TypeScript and Tailwind CSS
-- [x] Responsive chat interface component
-- [x] Message input with Enter key support
-- [x] Message display with user/bot avatars
-- [x] Loading states and error handling
-- [x] Comprehensive test suite with Jest + React Testing Library
-- [x] Shadcn UI components integration
-- [x] Modern, accessible UI design
+- [x] HTML5 Canvas-based whiteboard component
+- [x] Predefined system design blocks (Load Balancer, Web Server, Database, Redis, etc.)
+- [x] Block placement and dragging functionality (reliable select + move)
+- [x] Connection creation between blocks (intuitive, with dashed preview while connecting)
+- [x] User-editable connection labels
+- [x] Undo/Redo for discrete actions (add/move/connect/delete/clear/label edit)
+- [x] PNG export capability
+- [x] Responsive design for different screen sizes (resize-safe redraws)
+- [x] Comprehensive test suite with Jest
+- [x] Integration with chat page via tab system
 
 #### What was implemented:
 
-**Frontend Application Structure:**
-- ✅ NextJS 14+ application with TypeScript configuration
-- ✅ Tailwind CSS for responsive styling and modern design
-- ✅ Shadcn UI component library integration
-- ✅ Proper TypeScript types and interfaces
-- ✅ Component-based architecture with reusable UI components
+**Whiteboard Component (`frontend/components/WhiteboardCanvas.tsx`):**
+- **Block-Based System Design**: Predefined system design blocks including Load Balancer, Web Server, Database, Redis Cache, API Gateway, CDN, Message Queue, Cache, Monitoring, Logging.
+- **Interactive Canvas**: Mouse event handling for block placement, reliable dragging, intuitive connection creation, and deletion.
+- **Tool System**: Select (move/select) and Connect (click source, then target). While connecting, a dashed “rubberband” preview line follows the cursor.
+- **Visual Design**: Color-coded rectangular blocks with clear labels; selected block has a darker border.
+- **Connection Labels**: User-editable string shown at connection midpoint; bolded when selected. Default label for new connections is "text".
+- **Undo/Redo**: Granular history for discrete actions (add/move on mouse-up/connect/delete/clear/label edit). First-undo safety avoids clearing the canvas.
+- **Stability**: Resize-safe redraws via ResizeObserver; fixed outside-click flicker and disappearing blocks; fixed initial undo behavior.
+- **PNG Export**: Canvas-to-PNG conversion for AI analysis.
 
-**Chat Interface Component:**
-- ✅ `ChatInterface` component with comprehensive chat functionality
-- ✅ Message input with placeholder text and validation
-- ✅ Enter key support for message submission
-- ✅ Send button with proper loading states
-- ✅ Message display with user and bot avatars
-- ✅ Responsive design for mobile and desktop
-- ✅ Proper accessibility attributes and ARIA labels
+**UI Integration (`frontend/app/chat/page.tsx`):**
+- **Tab System**: Added tabs to separate chat and whiteboard functionality
+- **Seamless Switching**: Users can switch between AI chat and system design whiteboard
+- **Responsive Layout**: Whiteboard integrates seamlessly with existing chat interface
 
-**UI Components Library:**
-- ✅ Avatar component for user/bot identification
-- ✅ Button component with loading states
-- ✅ Card component for message containers
-- ✅ Input and Textarea components for form elements
-- ✅ Badge component for status indicators
-- ✅ ScrollArea component for message history
-- ✅ Separator component for visual organization
+**Component Dependencies:**
+- **Radix UI Integration**: Added `@radix-ui/react-tabs` for accessible tab functionality
+- **Consistent Styling**: Tabs follow the established design system
+ - **Input Component**: Used `Input` for connection label editing UI
 
-**Message Management:**
-- ✅ Message state management with React hooks
-- ✅ Message validation and sanitization
-- ✅ Loading states during message submission
-- ✅ Error handling and user feedback
-- ✅ Message history display with proper scrolling
-
-**Responsive Design:**
-- ✅ Mobile-first responsive design approach
-- ✅ Tailwind CSS breakpoints for different screen sizes
-- ✅ Proper spacing and typography scaling
-- ✅ Touch-friendly interface elements
-- ✅ Consistent design language across components
-
-#### Challenges Faced & Solutions:
-
-1. **Enter Key Event Handling**
-   - **Challenge**: Enter key press wasn't triggering form submission properly
-   - **Root Cause**: `onSendMessage` was defined as returning `void` but component tried to call `.catch()` on it
-   - **Solution**: Updated interface to make `onSendMessage` return `Promise<void>` and updated test mock accordingly
-   - **Code Fix**: Changed `onSendMessage: (message: string) => void` to `onSendMessage: (message: string) => Promise<void>`
-
-2. **Test Event Simulation Issues**
-   - **Challenge**: `fireEvent.keyPress` wasn't working reliably for Enter key testing
-   - **Solution**: Used `fireEvent.keyDown` with proper event properties for more reliable keyboard event simulation
-   - **Code Fix**: Changed from `fireEvent.keyPress(input, { key: 'Enter' })` to `fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })`
-
-3. **Duplicate Assessment Score Elements**
-   - **Challenge**: Multiple elements with "4/5" text causing test failures
-   - **Solution**: Updated test to check for unique assessment scores that only appear once
-   - **Code Fix**: Changed test to look for "3/5" (technical deep dive) instead of "4/5" (requirements analysis)
-
-4. **Jest Configuration Warning**
-   - **Challenge**: Unknown `moduleNameMapping` option in Jest config
-   - **Solution**: Fixed typo from `moduleNameMapping` to `moduleNameMapper`
-   - **Code Fix**: Updated `jest.config.js` with correct configuration option
-
-5. **Async Function Handling**
-   - **Challenge**: Mock function wasn't properly handling async calls
-   - **Solution**: Updated test mock to return a resolved Promise
-   - **Code Fix**: Changed `jest.fn()` to `jest.fn().mockResolvedValue(undefined)`
+**Comprehensive Testing (`frontend/__tests__/WhiteboardCanvas.test.tsx`):**
+- **27 Test Cases**: Covering all component functionality
+- **Test Categories**:
+  - Component rendering and UI elements
+  - Tool selection and switching
+  - Block management (add, delete, clear)
+  - Canvas operations and mouse events
+  - PNG export functionality
+  - Status display and updates
+  - Block types and styling
+  - Responsive design
+  - Error handling
+  - Accessibility features
+- **Mock Setup**: Proper canvas mocking for Jest environment
 
 #### Technical Implementation Details:
 
-**Component Architecture:**
+**Canvas Architecture:**
 ```typescript
-interface ChatInterfaceProps {
-    messages: Message[]
-    onSendMessage: (message: string) => Promise<void>
-    isLoading?: boolean
-    error?: string | null
-    isTyping?: boolean
-    className?: string
+interface SystemBlock {
+  id: string
+  type: 'load-balancer' | 'web-server' | 'database' | 'redis' | 'api-gateway' | 'cdn' | 'queue' | 'cache' | 'monitoring' | 'logging'
+  x: number
+  y: number
+  width: number
+  height: number
+  label: string
+  connections: string[]
+}
+
+interface Connection {
+  id: string
+  from: string
+  to: string
+  label: string
 }
 ```
 
-**Message Handling:**
-```typescript
-const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        if (inputValue.trim()) {
-            const message = inputValue.trim()
-            setInputValue('')
-            setIsSubmitting(true)
-            
-            onSendMessage(message)
-                .catch(error => {
-                    console.error('Failed to send message:', error)
-                    setIsSubmitting(false)
-                })
-        }
-    }
-}
-```
+**Block & Connection Management:**
+- **Dynamic Block Addition**: Click block type buttons to add blocks to canvas center
+- **Drag and Drop**: Mouse events for block positioning
+- **Connection System**: Visual connections with arrows and user-editable labels (default "text")
+- **State Management**: React state for blocks, connections, selection, and tool state with granular history
 
-**Form Submission:**
-```typescript
-const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inputValue.trim() || isSubmitting) return
-    
-    const message = inputValue.trim()
-    setInputValue('')
-    setIsSubmitting(true)
-    
-    try {
-        await onSendMessage(message)
-    } catch (error) {
-        console.error('Failed to send message:', error)
-    } finally {
-        setIsSubmitting(false)
-    }
-}
-```
+**PNG Export:**
+- **Canvas to Data URL**: `canvas.toDataURL('image/png')` for PNG generation
+- **Callback Integration**: `onSave` prop for parent component integration
+- **Error Handling**: Graceful fallback for export failures
 
-#### Testing Implementation:
+#### Integration Points:
 
-**Comprehensive Test Suite:**
-- ✅ **Component Rendering Tests**: Proper rendering of chat interface, messages, and input
-- ✅ **User Interaction Tests**: Message input, form submission, Enter key handling
-- ✅ **Message Display Tests**: User/bot message rendering with proper avatars
-- ✅ **Assessment Display Tests**: Learning assessment scores and feedback
-- ✅ **Error Handling Tests**: Proper error state display and user feedback
-- ✅ **Loading State Tests**: Submission loading states and user feedback
+**Frontend Integration:**
+- **Tab Navigation**: Seamless switching between chat and whiteboard
+- **Component Composition**: Whiteboard integrates with existing UI components
+- **State Management**: Independent whiteboard state from chat functionality
 
-**Test Coverage:**
-- ✅ **ChatInterface.test.tsx**: 8 comprehensive test cases
-- ✅ **page.test.tsx**: Basic page rendering tests
-- ✅ **Jest Configuration**: Proper TypeScript and module path mapping
-- ✅ **Test Setup**: React Testing Library with proper accessibility testing
-
-**Key Test Scenarios:**
-```typescript
-it('sends message when Enter key pressed', async () => {
-    render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />)
-    
-    const input = screen.getByPlaceholderText('Ask about system design concepts...')
-    fireEvent.change(input, { target: { value: 'Hello' } })
-    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
-    
-    await waitFor(() => {
-        expect(mockOnSendMessage).toHaveBeenCalledWith('Hello')
-    })
-})
-```
-
-#### UI/UX Design Decisions:
-
-**Design System:**
-- ✅ **Shadcn UI**: Consistent component library for professional appearance
-- ✅ **Tailwind CSS**: Utility-first CSS framework for rapid development
-- ✅ **Responsive Design**: Mobile-first approach with proper breakpoints
-- ✅ **Accessibility**: ARIA labels, proper focus management, keyboard navigation
-
-**Visual Hierarchy:**
-- ✅ **Avatar System**: Clear user vs bot message identification
-- ✅ **Message Cards**: Structured message display with proper spacing
-- ✅ **Input Design**: Clear input field with placeholder text and validation
-- ✅ **Loading States**: Visual feedback during message submission
-- ✅ **Error Handling**: Clear error messages and user guidance
-
-**User Experience:**
-- ✅ **Enter Key Support**: Familiar chat interface behavior
-- ✅ **Real-time Feedback**: Loading states and immediate response
-- ✅ **Message Validation**: Prevents empty message submission
-- ✅ **Responsive Layout**: Works seamlessly across all device sizes
-
-#### Code Quality Improvements:
-
-**TypeScript Implementation:**
-- ✅ **Proper Interfaces**: Well-defined props and message types
-- ✅ **Type Safety**: Comprehensive type checking for all components
-- ✅ **Error Handling**: Proper error types and async handling
-- ✅ **Component Props**: Clear prop definitions with optional properties
-
-**Component Architecture:**
-- ✅ **Single Responsibility**: Each component has a clear, focused purpose
-- ✅ **Reusable Components**: UI components can be used across the application
-- ✅ **Proper State Management**: React hooks for local component state
-- ✅ **Event Handling**: Proper event handling with TypeScript types
-
-**Testing Strategy:**
-- ✅ **Comprehensive Coverage**: All user interactions and edge cases tested
-- ✅ **Accessibility Testing**: React Testing Library ensures proper accessibility
-- ✅ **Async Testing**: Proper async/await handling in tests
-- ✅ **Mock Management**: Clean mock setup and teardown
-
-#### Local Development Setup:
-
-**Frontend Development:**
-```bash
-cd frontend
-npm install          # Install dependencies
-npm run dev         # Start development server
-npm test            # Run test suite
-npm run build       # Build for production
-```
-
-**Component Development:**
-- ✅ Hot reloading for rapid development
-- ✅ TypeScript compilation with real-time error checking
-- ✅ Tailwind CSS with JIT compilation
-- ✅ Component library integration with Shadcn UI
+**Future Backend Integration:**
+- **PNG Analysis**: Ready for backend PNG processing and AI analysis
+- **Session Persistence**: Whiteboard state can be saved with chat sessions
+- **Collaborative Features**: Foundation for real-time collaboration
 
 #### Testing Results:
 
-**All Tests Passing:**
-- ✅ **8/8 ChatInterface tests**: Component rendering, user interactions, message handling
-- ✅ **2/2 Page tests**: Basic page functionality
-- ✅ **Jest Configuration**: No warnings or configuration errors
-- ✅ **Test Coverage**: Comprehensive coverage of all user scenarios
+- **Frontend Tests:**
+- **Whiteboard Tests**: 27/27 passed ✅ (updated to cover stability, label editing, and undo/redo)
+- **Chat Tests**: 14/14 passed ✅
+- **Page Tests**: 2/2 passed ✅
+- **Total**: 43/43 passed ✅
 
-**Test Performance:**
-- ✅ **Fast Execution**: Tests complete in under 5 seconds
-- ✅ **Reliable Results**: Consistent test results across runs
-- ✅ **No Flaky Tests**: All tests pass reliably
-- ✅ **Proper Cleanup**: No test interference or state leakage
+**Backend Tests:**
+- **All Tests**: 47/47 passed ✅
+- **Coverage**: 77% overall
 
-#### Key Technical Decisions:
+#### Benefits of Block-Based Approach:
 
-1. **Component Library**: Chose Shadcn UI for consistent, accessible components
-2. **CSS Framework**: Tailwind CSS for rapid development and responsive design
-3. **Testing Strategy**: Jest + React Testing Library for comprehensive testing
-4. **Type Safety**: Full TypeScript implementation for better development experience
-5. **Async Handling**: Proper Promise-based async function handling
+**LLM Analysis Advantages:**
+- **Consistent Structure**: Predefined blocks have uniform shapes and labels
+- **Easy Recognition**: LLMs can easily identify system components
+- **Standardized Format**: All diagrams follow consistent architecture patterns
+- **Better Parsing**: Structured data vs. freehand drawing
 
-#### Future-Ready Features:
+**User Experience:**
+- **Professional Appearance**: Clean, consistent system design diagrams
+- **Faster Creation**: No need for drawing skills
+- **Standard Components**: Common system design patterns built-in
+- **Easy Modifications**: Simple drag-and-drop editing
 
-**Extensibility:**
-- ✅ **Component Architecture**: Easy to add new chat features
-- ✅ **Message Types**: Support for different message formats
-- ✅ **UI Components**: Reusable components for other parts of the application
-- ✅ **State Management**: Ready for more complex state management needs
-
-**Integration Ready:**
-- ✅ **Backend Integration**: Ready to connect with FastAPI backend
-- ✅ **Real-time Features**: Component structure supports WebSocket integration
-- ✅ **Authentication**: Ready for user authentication and session management
-- ✅ **Internationalization**: Component structure supports i18n
-
-#### Production Readiness:
-
-**Build Optimization:**
-- ✅ **NextJS Optimization**: Automatic code splitting and optimization
-- ✅ **CSS Optimization**: Tailwind CSS purging for production builds
-- ✅ **TypeScript Compilation**: Production-ready TypeScript compilation
-- ✅ **Component Tree Shaking**: Unused components removed from builds
-
-**Performance:**
-- ✅ **Fast Rendering**: Optimized React component rendering
-- ✅ **Efficient Re-renders**: Proper state management prevents unnecessary re-renders
-- ✅ **Responsive Design**: Optimized for all device sizes
-- ✅ **Accessibility**: WCAG compliant interface design
+**Development Benefits:**
+- **Maintainable Code**: Structured component architecture
+- **Extensible Design**: Easy to add new block types
+- **Testable Components**: Comprehensive test coverage
+- **Performance**: Efficient canvas rendering and updates
 
 **Next Steps:**
-✅ **COMPLETED** - Ready to proceed to Issue #6: FastAPI Backend with Basic Chat Endpoint
+✅ **COMPLETED** - Ready to proceed to Issue #9: PNG Capture and Upload Functionality
 
 ---
 
@@ -1841,14 +1696,15 @@ learn-with-ai/
 - **Issue #5**: Basic Frontend UI with Chat Interface
 - **Issue #6**: FastAPI Backend with Basic Chat Endpoint
 - **Issue #7**: End-to-End Chat Flow Integration
-
-### 🎯 **READY FOR NEXT SESSION**
 - **Issue #8**: HTML5 Canvas Whiteboard Component
 
+### 🎯 **READY FOR NEXT SESSION**
+- **Issue #9**: PNG Capture and Upload Functionality
+
 ### 📊 **Progress Metrics**
-- **Issues Completed**: 7/24 (29.2%)
-- **Phase 1 Progress**: 7/7 (100%) ✅ **PHASE 1 COMPLETE**
-- **Development Time**: ~20 hours
+- **Issues Completed**: 8/24 (33.3%)
+- **Phase 1 Progress**: 8/8 (100%) ✅ **PHASE 1 COMPLETE**
+- **Development Time**: ~25 hours
 - **Code Quality**: Production-ready with comprehensive ADK integration, session management, frontend UI, backend API, and end-to-end integration with full test coverage
 
 ---

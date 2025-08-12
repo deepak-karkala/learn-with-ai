@@ -26,6 +26,8 @@ from app.models.whiteboard import (
     WhiteboardAnalysisResponse
 )
 from app.services.assessment_service import AssessmentService
+from app.services.progress_service import ProgressService
+from app.api.progress import router as progress_router
 from app.models.assessment import (
     AssessmentRequest,
     AssessmentResponse,
@@ -140,6 +142,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         adk_service = ADKService()
         whiteboard_service = WhiteboardService(adk_service)
         assessment_service = AssessmentService()
+        app.state.assessment_service = assessment_service
+        app.state.progress_service = ProgressService(assessment_service)
         yield
     except Exception as e:
         # Log startup error but don't crash the app
@@ -657,6 +661,14 @@ async def cleanup_old_assessments(max_age_days: int = 90):
             status_code=500,
             detail=f"Cleanup failed: {str(e)}",
         )
+
+
+# Progress API endpoints
+app.include_router(
+    progress_router,
+    prefix="/api",
+    tags=["progress"]
+)
 
 
 if __name__ == "__main__":

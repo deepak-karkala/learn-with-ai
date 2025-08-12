@@ -6,6 +6,7 @@ import { WhiteboardCanvas } from '../../components/WhiteboardCanvas'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { ChevronLeft, ChevronRight, MessageSquare, Palette, Target, X } from 'lucide-react'
+import { AssessmentPanel } from '../../components/AssessmentPanel'
 
 interface Message {
     id: string
@@ -32,6 +33,9 @@ export default function ChatPage() {
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [showFeedback, setShowFeedback] = useState(false)
+    const [assessmentResult, setAssessmentResult] = useState<any>(null)
+    const [isAssessmentLoading, setIsAssessmentLoading] = useState(false)
+
 
     // Mock user for development
     const mockUser = { email: 'john@example.com' }
@@ -90,7 +94,7 @@ export default function ChatPage() {
 
             const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),
-                content: data.response,
+                content: data.message,  // Backend returns 'message', not 'response'
                 role: 'assistant',
                 timestamp: new Date()
             }
@@ -203,6 +207,53 @@ export default function ChatPage() {
         setAnalysisResult(null)
     }
 
+    const handleRequestAssessment = async () => {
+        if (messages.length < 2) return
+
+        setIsAssessmentLoading(true)
+
+        try {
+            // Prepare assessment request data
+            const conversationHistory = messages
+                .map(msg => `${msg.role}: ${msg.content}`)
+                .join('\n')
+                .slice(-2000) // Limit to last 2000 characters
+
+            const assessmentRequest = {
+                user_id: mockUser.email,
+                interaction_context: `User engaged in system design learning session with ${messages.length} messages exchanged. Recent conversation: ${messages.slice(-3).map(m => m.content).join(' ')}`,
+                conversation_history: conversationHistory,
+                assessment_type: 'chat'
+            }
+
+            const response = await fetch('/api/assessment/evaluate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(assessmentRequest),
+            })
+
+            if (!response.ok) {
+                throw new Error(`Assessment failed: ${response.status}`)
+            }
+
+            const assessmentData = await response.json()
+            setAssessmentResult(assessmentData)
+
+            // Switch to assessment tab to show results
+            setWhiteboardVisible(false)
+
+        } catch (error) {
+            console.error('Failed to get assessment:', error)
+            alert(`Assessment failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        } finally {
+            setIsAssessmentLoading(false)
+        }
+    }
+
+
+
     return (
         <div className="flex h-screen bg-gray-50">
             {/* Chat Panel - Left Side */}
@@ -236,6 +287,7 @@ export default function ChatPage() {
                             <ChatInterface
                                 messages={messages}
                                 onSendMessage={handleSendMessage}
+                                onRequestAssessment={handleRequestAssessment}
                                 isLoading={isLoading}
                             />
                         </div>
@@ -260,6 +312,35 @@ export default function ChatPage() {
                                 onAnalyze={handleWhiteboardAnalysis}
                                 isAnalyzing={isAnalyzing}
                             />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+
+            {/* Assessment Panel */}
+            {!whiteboardVisible && assessmentResult && (
+                <div className="flex-1 bg-white border-l border-gray-200">
+                    <div className="h-full flex flex-col">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-purple-50">
+                            <div className="flex items-center gap-2">
+                                <Target className="h-5 w-5 text-purple-600" />
+                                <h2 className="text-lg font-semibold text-gray-900">Learning Assessment</h2>
+                            </div>
+                            <Button
+                                onClick={() => setWhiteboardVisible(true)}
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center gap-2"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                                Back to Whiteboard
+                            </Button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4">
+                            <AssessmentPanel assessment={assessmentResult} />
                         </div>
                     </div>
                 </div>

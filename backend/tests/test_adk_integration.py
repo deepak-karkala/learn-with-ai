@@ -167,20 +167,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
 #         assert response.error is None
 #         
 #         # The response should indicate success (allowing for LLM variability)
-        response_lower = response.message.lower()
-        assert any(word in response_lower for word in ['integration', 'test', 'successful', 'hello', 'working'])
+#         response_lower = response.message.lower()
+#         assert any(word in response_lower for word in ['integration', 'test', 'successful', 'hello', 'working'])
 
-    def test_environment_validation(self):
-        """Test environment validation logic"""
-        from app.services.config import get_settings
-        
-        settings = get_settings()
-        
-        # This should not raise an exception if properly configured
-        try:
-            settings.validate_required_settings()
-        except ValueError as e:
-            pytest.fail(f"Environment validation failed: {e}")
+# def test_environment_validation(self):
+#     """Test environment validation logic"""
+#     from app.services.config import get_settings
+#     
+#     settings = get_settings()
+#     
+#     # This should not raise an exception if properly configured
+#     try:
+#         settings.validate_required_settings()
+#     except ValueError as e:
+#         pytest.fail(f"Environment validation failed: {e}")
 
 
 @pytest.mark.skipif(

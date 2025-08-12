@@ -20,6 +20,13 @@ class Settings(BaseSettings):
         if os.getenv("PYTEST_CURRENT_TEST"):
             super().__init__(_env_file=None, **values)
         else:
+            # Load environment variables first
+            env_vars = {
+                key: value
+                for key, value in os.environ.items()
+                if key.lower() in ["openai_api_key", "google_api_key"]
+            }
+            values.update(env_vars)
             super().__init__(**values)
 
     # Google ADK Configuration (following ADK streaming documentation)
@@ -39,8 +46,11 @@ class Settings(BaseSettings):
 
     # OpenAI Configuration
     openai_api_key: str = Field(
-        default="", description="OpenAI API key for multimodal analysis"
+        default="", description="OpenAI API key for multimodal analysis and assessments"
     )
+    assessment_model_name: str = "gpt-4-1106-preview"  # GPT-4 Turbo for assessments
+    assessment_max_tokens: int = 2000
+    assessment_temperature: float = 0.1
 
     # Cost Tracking Configuration
     enable_cost_tracking: bool = True
@@ -70,6 +80,9 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",  # Ignore unrelated env vars present in .env
+        case_sensitive=False,  # Allow case-insensitive env vars
+        env_prefix="",  # No prefix for env vars
+        use_enum_values=True,  # Use enum values directly
     )
 
     @field_validator("debug", mode="before")

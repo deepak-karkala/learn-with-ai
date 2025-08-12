@@ -51,6 +51,7 @@ interface WhiteboardCanvasProps {
     onSave?: (pngData: string) => void
     onAnalyze?: (pngData: string) => void
     isAnalyzing?: boolean
+    // Removed onRequestAssessment prop
 }
 
 const BLOCK_TYPES = {
@@ -628,6 +629,8 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                         </>
                     )}
                 </Button>
+
+
             </div>
 
             {/* Secondary Toolbar */}

@@ -1,12 +1,19 @@
-import pytest
 from fastapi.testclient import TestClient
-from app.main import app
 from app.services.assessment_service import AssessmentService
 
-# Initialize services for testing
-app.state.assessment_service = AssessmentService()
 
-client = TestClient(app)
+def get_test_client():
+    """Create a test client with proper service initialization"""
+    from app.main import app
+    # Manually initialize the assessment service for testing
+    app.state.assessment_service = AssessmentService()
+    # Also set the global variable that main.py checks
+    import app.main as main_module
+    main_module.assessment_service = AssessmentService()
+    return TestClient(app)
+
+
+client = get_test_client()
 
 
 class TestAssessmentE2E:
@@ -18,7 +25,13 @@ class TestAssessmentE2E:
         # Step 1: Create an assessment
         assessment_request = {
             "user_id": "e2e_test_user",
-            "interaction_context": "User designed a scalable e-commerce system with microservices architecture, load balancer, API gateway, user service, product service, order service, payment service, and Redis cache. They discussed database sharding, CDN for static content, and monitoring strategies.",
+            "interaction_context": (
+                "User designed a scalable e-commerce system with microservices "
+                "architecture, load balancer, API gateway, user service, product "
+                "service, order service, payment service, and Redis cache. They "
+                "discussed database sharding, CDN for static content, and "
+                "monitoring strategies."
+            ),
             "whiteboard_feedback": {
                 "components": [
                     "load_balancer",

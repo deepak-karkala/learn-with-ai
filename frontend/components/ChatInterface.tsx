@@ -9,6 +9,7 @@ import { Badge } from './ui/badge'
 import { ScrollArea } from './ui/scroll-area'
 import { Separator } from './ui/separator'
 import { Send, Bot, User, AlertCircle } from 'lucide-react'
+import { AssessmentButton } from './AssessmentButton'
 
 export interface Message {
     id: string
@@ -33,8 +34,9 @@ export interface Message {
 interface ChatInterfaceProps {
     messages: Message[]
     onSendMessage: (message: string) => Promise<void>
+    onRequestAssessment?: () => void
     isLoading?: boolean
-    error?: string | null
+    error?: null
     isTyping?: boolean
     className?: string
 }
@@ -42,6 +44,7 @@ interface ChatInterfaceProps {
 export function ChatInterface({
     messages,
     onSendMessage,
+    onRequestAssessment,
     isLoading = false,
     error = null,
     isTyping = false,
@@ -221,6 +224,18 @@ export function ChatInterface({
                                     </div>
                                 </CardContent>
                             </Card>
+                        </div>
+                    )}
+
+                    {/* Assessment Button - Show after some messages */}
+                    {messages.length >= 2 && onRequestAssessment && (
+                        <div className="flex justify-center py-4">
+                            <div className="text-center">
+                                <p className="text-sm text-gray-600 mb-3">
+                                    Ready to evaluate your progress?
+                                </p>
+                                <AssessmentButton onRequestAssessment={onRequestAssessment} />
+                            </div>
                         </div>
                     )}
 

@@ -25,6 +25,13 @@ from app.models.whiteboard import (
     WhiteboardAnalysisRequest,
     WhiteboardAnalysisResponse
 )
+from app.services.assessment_service import AssessmentService
+from app.models.assessment import (
+    AssessmentRequest,
+    AssessmentResponse,
+    AssessmentHistoryResponse,
+    AssessmentSummary
+)
 from app.services.config import settings, setup_logging
 
 # Load environment variables
@@ -36,6 +43,7 @@ setup_logging(settings)
 # ADK service will be initialized properly with dependency injection
 adk_service: Optional[ADKService] = None
 whiteboard_service: Optional[WhiteboardService] = None
+assessment_service: Optional[AssessmentService] = None
 
 # Rate limiting storage
 rate_limit_storage = defaultdict(list)
@@ -125,12 +133,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown
     for proper resource management
     """
-    global adk_service, whiteboard_service
+    global adk_service, whiteboard_service, assessment_service
 
     # Startup
     try:
         adk_service = ADKService()
         whiteboard_service = WhiteboardService(adk_service)
+        assessment_service = AssessmentService()
         yield
     except Exception as e:
         # Log startup error but don't crash the app
@@ -140,6 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error(f"Failed to initialize services: {e}")
         adk_service = None
         whiteboard_service = None
+        assessment_service = None
         yield
     finally:
         # Shutdown - cleanup resources
@@ -445,6 +455,207 @@ async def analyze_whiteboard(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to analyze whiteboard: {str(e)}",
+        )
+
+
+# Assessment API endpoints
+@app.post("/api/assessment/evaluate", response_model=AssessmentResponse)
+async def evaluate_assessment(request: AssessmentRequest) -> AssessmentResponse:
+    """
+    Evaluate a user's system design performance using LLM judge
+    
+    This endpoint provides comprehensive 6-dimensional assessment across:
+    - Requirements Analysis
+    - System Architecture  
+    - Technical Deep Dive
+    - Scale & Performance
+    - Reliability & Fault Tolerance
+    - Communication & Thought Process
+    """
+    try:
+        if assessment_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Assessment service is not available",
+            )
+        
+        assessment = await assessment_service.evaluate_assessment(request)
+        return assessment
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Assessment evaluation failed: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Assessment evaluation failed: {str(e)}",
+        )
+
+
+@app.get("/api/assessment/history/{user_id}", response_model=AssessmentHistoryResponse)
+async def get_assessment_history(
+    user_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    assessment_type: Optional[str] = None
+) -> AssessmentHistoryResponse:
+    """
+    Retrieve assessment history for a specific user
+    
+    Supports pagination and filtering by assessment type
+    """
+    try:
+        if assessment_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Assessment service is not available",
+            )
+        
+        if limit > 100:
+            limit = 100  # Cap at 100 for performance
+        
+        history = await assessment_service.get_assessment_history(
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+            assessment_type=assessment_type
+        )
+        return history
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Failed to retrieve assessment history: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve assessment history: {str(e)}",
+        )
+
+
+@app.get("/api/assessment/summary/{user_id}", response_model=AssessmentSummary)
+async def get_assessment_summary(user_id: str) -> AssessmentSummary:
+    """
+    Get comprehensive assessment summary and analytics for a user
+    
+    Includes:
+    - Overall performance metrics
+    - Dimension averages
+    - Trend analysis
+    - Top recommendations
+    - Next assessment suggestions
+    """
+    try:
+        if assessment_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Assessment service is not available",
+            )
+        
+        summary = await assessment_service.get_assessment_summary(user_id)
+        return summary
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Failed to generate assessment summary: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate assessment summary: {str(e)}",
+        )
+
+
+@app.get("/api/assessment/{assessment_id}", response_model=AssessmentResponse)
+async def get_assessment(assessment_id: str) -> AssessmentResponse:
+    """
+    Retrieve a specific assessment by ID
+    """
+    try:
+        if assessment_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Assessment service is not available",
+            )
+        
+        assessment = assessment_service.get_assessment(assessment_id)
+        if not assessment:
+            raise HTTPException(
+                status_code=404,
+                detail="Assessment not found"
+            )
+        return assessment
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Failed to retrieve assessment: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve assessment: {str(e)}",
+        )
+
+
+@app.delete("/api/assessment/{assessment_id}")
+async def delete_assessment(assessment_id: str):
+    """
+    Delete an assessment (admin function)
+    """
+    try:
+        if assessment_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Assessment service is not available",
+            )
+        
+        success = assessment_service.delete_assessment(assessment_id)
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail="Assessment not found"
+            )
+        return {"message": "Assessment deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Failed to delete assessment: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete assessment: {str(e)}",
+        )
+
+
+@app.post("/api/assessment/cleanup")
+async def cleanup_old_assessments(max_age_days: int = 90):
+    """
+    Clean up old assessments (admin function)
+    
+    Removes assessments older than specified days for memory management
+    """
+    try:
+        if assessment_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Assessment service is not available",
+                )
+        
+        assessment_service.cleanup_old_assessments(max_age_days)
+        return {
+            "message": (
+                f"Cleanup completed for assessments older than {max_age_days} days"
+            )
+        }
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Cleanup failed: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cleanup failed: {str(e)}",
         )
 
 

@@ -21,6 +21,8 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from app.services.config import settings
+from app.models.diagram import DiagramType
+
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,7 @@ class ChatResponse(BaseModel):
     success: bool
     session_id: str
     error: Optional[str] = None
+    artifacts: Optional[Dict[str, Any]] = None  # For storing generated diagrams, etc.
 
 
 class ADKService:
@@ -705,9 +708,12 @@ You have access to the conversation history through the session state. Use this 
                     f"{len(response_text)} characters"
                 )
 
-                return ChatResponse(
-                    message=response_text.strip(), success=True, session_id=session_id
+                # Check if the response suggests generating a diagram
+                enhanced_response = await self._enhance_response_with_diagrams(
+                    response_text.strip(), request.user_id, session_id, request.message
                 )
+                
+                return enhanced_response
             else:
                 logger.warning(f"Empty response from ADK for session {session_id}")
                 return ChatResponse(
@@ -963,6 +969,318 @@ You have access to the conversation history through the session state. Use this 
         # Combine scores
         total_score = length_score + technical_score
         return min(1.0, total_score)
+
+    async def generate_mermaid_code(
+        self, system_description: str, diagram_type: DiagramType, session_id: Optional[str] = None
+    ) -> tuple[str, str, int, float]:
+        """Generates Mermaid code from a system description using the LLM."""
+        logger.info(f"Generating Mermaid code for a {diagram_type.value} diagram.")
+        
+        prompt = f"""
+        You are an expert in system design and software architecture.
+        Based on the following system description, generate the corresponding Mermaid code for a '{diagram_type.value}' diagram.
+        The output should be only the Mermaid code block, without any explanations or surrounding text.
+
+        System Description:
+        "{system_description}"
+
+        Mermaid Code:
+        """
+
+        # Use a temporary session if none is provided
+        user_id = "diagram_generation_user"
+        temp_session_id = f"{user_id}_session_{int(time.time())}"
+        
+        # Create a specialized prompt for Mermaid diagram generation
+        mermaid_prompt = self._create_mermaid_generation_prompt(system_description, diagram_type)
+        
+        logger.info(f"Generating Mermaid code for {diagram_type.value} diagram: {system_description[:100]}...")
+        
+        try:
+            # Use the working chat pattern to generate Mermaid code
+            # Use a special user_id to avoid triggering diagram auto-generation
+            chat_request = ChatRequest(
+                message=mermaid_prompt,
+                user_id="mermaid_generator_internal",  # Special user to avoid recursion
+                session_id=temp_session_id
+            )
+            
+            # Get the LLM response for Mermaid generation
+            response = await self.chat(chat_request)
+            
+            if response.success:
+                # Extract Mermaid code from the response
+                mermaid_code = self._extract_mermaid_code(response.message)
+                logger.info(f"Successfully generated dynamic Mermaid code: {len(mermaid_code)} characters")
+                
+                # Estimate tokens and cost based on response
+                estimated_tokens = len(response.message.split()) * 1.3  # Rough estimation
+                estimated_cost = estimated_tokens * 0.00002  # Approximate cost per token
+                
+                return mermaid_code, "gemini-2.0-flash-exp", int(estimated_tokens), estimated_cost
+            else:
+                logger.warning(f"LLM failed to generate Mermaid code: {response.error}")
+                # Fall back to a basic template as last resort
+                fallback_code = self._create_fallback_mermaid(system_description, diagram_type)
+                return fallback_code, "gemini-2.0-flash-exp", 50, 0.001
+                
+        except Exception as e:
+            logger.error(f"Error generating Mermaid code: {e}")
+            # Fall back to a basic template
+            fallback_code = self._create_fallback_mermaid(system_description, diagram_type)
+            return fallback_code, "gemini-2.0-flash-exp", 50, 0.001
+
+    async def _enhance_response_with_diagrams(
+        self, response_text: str, user_id: str, session_id: str, user_message: str = ""
+    ) -> ChatResponse:
+        """Enhance ADK response with automatic diagram generation when appropriate."""
+        
+        # Skip diagram generation for internal Mermaid generation requests
+        if user_id == "mermaid_generator_internal":
+            return ChatResponse(
+                message=response_text,
+                success=True,
+                session_id=session_id,
+                artifacts=None
+            )
+        
+        # Keywords that suggest the user wants a diagram
+        diagram_keywords = [
+            "diagram", "chart", "visualize", "architecture", "design", "draw", 
+            "show me", "create a", "generate", "flowchart", "mermaid",
+            "system design", "database schema", "workflow", "process flow",
+            "outline", "components", "structure", "layout"
+        ]
+        
+        # Check both user message and response for diagram keywords
+        combined_text = f"{user_message} {response_text}".lower()
+        should_generate_diagram = any(keyword in combined_text for keyword in diagram_keywords)
+        
+        # Debug logging
+        logger.info(f"Diagram detection for user {user_id}: keywords found = {should_generate_diagram}")
+        if should_generate_diagram:
+            found_keywords = [kw for kw in diagram_keywords if kw in combined_text]
+            logger.info(f"Found keywords: {found_keywords[:5]}")  # Log first 5 matches
+        
+        artifacts = None
+        
+        if should_generate_diagram:
+            try:
+                logger.info("Detected diagram request, auto-generating diagram")
+                
+                # Try to extract system description from the response
+                system_description = self._extract_system_description(response_text)
+                
+                if system_description:
+                    # Import here to avoid circular imports
+                    from app.models.diagram import DiagramGenerationRequest
+                    
+                    # Generate diagram
+                    diagram_request = DiagramGenerationRequest(
+                        system_description=system_description,
+                        diagram_type=DiagramType.ARCHITECTURE,  # Default to architecture
+                        user_id=user_id,
+                        session_id=session_id
+                    )
+                    
+                    # Get diagram service from app state (if available)
+                    diagram_service = getattr(self, '_diagram_service', None)
+                    if diagram_service:
+                        diagram_response = await diagram_service.generate_diagram(diagram_request)
+                        
+                        artifacts = {
+                            "diagrams": [{
+                                "id": diagram_response.diagram_id,
+                                "type": "mermaid_diagram",
+                                "artifact_id": diagram_response.png_artifact_id,
+                                "mermaid_code": diagram_response.mermaid_code,
+                                "description": system_description
+                            }]
+                        }
+                        
+                        # Replace conflicting text and enhance the response
+                        # Remove any text that says the agent can't generate images
+                        conflict_phrases = [
+                            "i cannot directly generate a png image",
+                            "my image generation capabilities are limited",
+                            "i cannot directly generate",
+                            "i am sorry, i cannot",
+                            "however, i can definitely help you outline"
+                        ]
+                        
+                        response_lower = response_text.lower()
+                        for phrase in conflict_phrases:
+                            if phrase in response_lower:
+                                # Find the position and remove conflicting sentences
+                                start_pos = response_lower.find(phrase)
+                                if start_pos != -1:
+                                    # Find the end of the sentence(s) that conflict
+                                    end_pos = response_text.find(".", start_pos)
+                                    if end_pos != -1:
+                                        response_text = response_text[:start_pos] + response_text[end_pos+1:]
+                        
+                                                            # Add the diagram confirmation
+                                    response_text += f"\n\n🎨 **Visual Diagram Generated!** I've created an informational image containing the Mermaid diagram code that illustrates this architecture. You can:\n\n• **View the diagram**: `/api/whiteboard/artifacts/{diagram_response.png_artifact_id}`\n• **Copy the Mermaid code** from the image to paste into tools like:\n  - https://mermaid.live/ (online editor)\n  - GitHub Markdown\n  - Miro, Lucidchart, or other diagram tools\n\n**System Description**: {system_description}"
+                        
+                        logger.info(f"Auto-generated diagram {diagram_response.diagram_id} for user {user_id}")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to auto-generate diagram: {e}")
+                # Don't fail the chat response, just log the error
+        
+        return ChatResponse(
+            message=response_text,
+            success=True,
+            session_id=session_id,
+            artifacts=artifacts
+        )
+
+    def _extract_system_description(self, response_text: str) -> Optional[str]:
+        """Extract a system description suitable for diagram generation."""
+        # Simple extraction - look for sentences that describe systems/architecture
+        sentences = response_text.split('.')
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if any(word in sentence.lower() for word in [
+                "system", "architecture", "service", "component", "database", 
+                "server", "client", "api", "microservice", "application"
+            ]):
+                if len(sentence) > 20:  # Ensure it's substantial enough
+                    return sentence
+        
+        # Fallback: use the first substantial sentence
+        substantial_sentences = [s.strip() for s in sentences if len(s.strip()) > 30]
+        if substantial_sentences:
+            return substantial_sentences[0]
+        
+        # Last resort: use a portion of the response
+        if len(response_text) > 50:
+            return response_text[:200] + "..." if len(response_text) > 200 else response_text
+        
+        return None
+
+    def set_diagram_service(self, diagram_service):
+        """Set the diagram service for auto-generation."""
+        self._diagram_service = diagram_service
+
+    def _create_mermaid_generation_prompt(self, system_description: str, diagram_type: DiagramType) -> str:
+        """Create a specialized prompt for generating Mermaid diagrams."""
+        
+        type_specific_guidance = {
+            DiagramType.ARCHITECTURE: """
+Focus on system architecture components like:
+- Load balancers, API gateways
+- Microservices, databases, caches
+- Message queues, CDNs
+- External services and APIs
+Use rectangular boxes for services, cylindrical shapes for databases, and clear arrows for data flow.""",
+            
+            DiagramType.WORKFLOW: """
+Focus on process flow and decision points:
+- Start/end points (rounded rectangles)
+- Decision diamonds with yes/no paths
+- Process steps (rectangles)
+- Clear sequential flow with arrows
+Use flowchart syntax with decision logic.""",
+            
+            DiagramType.DATABASE: """
+Focus on data relationships:
+- Entity boxes with field lists
+- Primary/foreign key relationships
+- One-to-many, many-to-many connections
+- Use ER diagram or class diagram syntax.""",
+            
+            DiagramType.NETWORK: """
+Focus on network topology:
+- Network devices (routers, switches, firewalls)
+- Connections and protocols
+- IP ranges and VLANs
+- Security boundaries"""
+        }
+        
+        guidance = type_specific_guidance.get(diagram_type, type_specific_guidance[DiagramType.ARCHITECTURE])
+        
+        prompt = f"""Please generate a Mermaid diagram for the following system description:
+
+**System Description:** {system_description}
+
+**Diagram Type:** {diagram_type.value.title()}
+
+**Requirements:**
+{guidance}
+
+**Important Instructions:**
+1. Return ONLY the Mermaid code, no explanations or markdown formatting
+2. Start with the appropriate Mermaid diagram type (graph TD, flowchart TD, erDiagram, etc.)
+3. Use clear, descriptive node labels
+4. Ensure proper syntax and valid Mermaid code
+5. Keep it focused and readable (max 15-20 nodes)
+6. Use meaningful node IDs (like UserService, Database, etc.)
+
+Generate the Mermaid diagram code now:"""
+
+        return prompt
+
+    def _create_fallback_mermaid(self, system_description: str, diagram_type: DiagramType) -> str:
+        """Create a basic fallback Mermaid diagram when LLM generation fails."""
+        
+        # Extract key terms from description for more dynamic fallback
+        description_lower = system_description.lower()
+        
+        if diagram_type == DiagramType.WORKFLOW:
+            return """flowchart TD
+    A[Start] --> B[Process Input]
+    B --> C{Decision Point}
+    C -->|Yes| D[Execute Action]
+    C -->|No| E[Alternative Path]
+    D --> F[End]
+    E --> F[End]"""
+        
+        elif diagram_type == DiagramType.DATABASE:
+            return """erDiagram
+    User ||--o{ Order : places
+    User {
+        int id
+        string name
+        string email
+    }
+    Order {
+        int id
+        date created_at
+        int user_id
+    }"""
+        
+        else:  # Architecture or default
+            # Try to be more dynamic based on description
+            if any(term in description_lower for term in ['microservice', 'service', 'api']):
+                return """graph TD
+    Client[Client App] --> Gateway[API Gateway]
+    Gateway --> Auth[Auth Service]
+    Gateway --> UserSvc[User Service]
+    Gateway --> OrderSvc[Order Service]
+    UserSvc --> UserDB[User Database]
+    OrderSvc --> OrderDB[Order Database]"""
+            else:
+                return """graph TD
+    A[Client] --> B[Load Balancer]
+    B --> C[Web Server 1]
+    B --> D[Web Server 2]
+    C --> E[Application Server]
+    D --> E[Application Server]
+    E --> F[Database]"""
+
+    def _extract_mermaid_code(self, response_text: str) -> str:
+        """Extracts Mermaid code from the LLM's response."""
+        # The LLM is prompted to return only the code, but let's be safe
+        if "```mermaid" in response_text:
+            code = response_text.split("```mermaid")[1].split("```")[0].strip()
+            return code
+        elif response_text.strip().startswith("graph") or response_text.strip().startswith("flowchart"):
+             return response_text.strip()
+        else:
+            logger.warning(f"Could not find a Mermaid code block in the response. Returning the full response. Response: {response_text}")
+            return response_text
 
     def health_check(self) -> Dict[str, Any]:
         """Check if the ADK service is properly configured and ready"""

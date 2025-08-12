@@ -89,7 +89,7 @@ class TestWhiteboardService:
         assert response.artifact_id is not None
         
         # Verify artifact was stored
-        artifact = whiteboard_service.get_artifact(response.artifact_id)
+        artifact = await whiteboard_service.get_artifact(response.artifact_id)
         assert artifact is not None
         assert artifact['user_id'] == "test_user"
         assert artifact['png_data'] == sample_png_data
@@ -110,7 +110,7 @@ class TestWhiteboardService:
         assert response.artifact_id is not None
         
         # Verify data URL prefix was removed
-        artifact = whiteboard_service.get_artifact(response.artifact_id)
+        artifact = await whiteboard_service.get_artifact(response.artifact_id)
         assert artifact['png_data'] == sample_png_data
     
     def test_upload_png_invalid_format_validation(self):

@@ -331,3 +331,7 @@ class WhiteboardService:
         
         logger.info(f"Cleaned up {len(artifacts_to_remove)} old artifacts")
         return len(artifacts_to_remove)
+
+    async def get_artifact(self, artifact_id: str) -> Optional[Dict[str, Any]]:
+        """Get artifact data by ID."""
+        return self._artifacts.get(artifact_id)

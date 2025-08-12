@@ -19,6 +19,7 @@ from app.services.adk_service import (
     SessionCreateResponse
 )
 from app.services.whiteboard_service import WhiteboardService
+from app.api.whiteboard import router as whiteboard_router
 from app.models.whiteboard import (
     PNGUploadRequest,
     PNGUploadResponse,
@@ -26,14 +27,17 @@ from app.models.whiteboard import (
     WhiteboardAnalysisResponse
 )
 from app.services.assessment_service import AssessmentService
-from app.services.progress_service import ProgressService
-from app.api.progress import router as progress_router
+from app.api.assessment import router as assessment_router
 from app.models.assessment import (
     AssessmentRequest,
     AssessmentResponse,
     AssessmentHistoryResponse,
     AssessmentSummary
 )
+from app.services.progress_service import ProgressService
+from app.api.progress import router as progress_router
+from app.services.diagram_service import DiagramService
+from app.api.diagrams import router as diagrams_router
 from app.services.config import settings, setup_logging
 
 # Load environment variables
@@ -46,6 +50,8 @@ setup_logging(settings)
 adk_service: Optional[ADKService] = None
 whiteboard_service: Optional[WhiteboardService] = None
 assessment_service: Optional[AssessmentService] = None
+progress_service: Optional[ProgressService] = None
+diagram_service: Optional[DiagramService] = None
 
 # Rate limiting storage
 rate_limit_storage = defaultdict(list)
@@ -135,28 +141,53 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown
     for proper resource management
     """
-    global adk_service, whiteboard_service, assessment_service
+    global adk_service, whiteboard_service, assessment_service, progress_service, diagram_service
+    
+    # Get logger for this function
+    import logging
+    logger = logging.getLogger(__name__)
 
     # Startup
     try:
         adk_service = ADKService()
         whiteboard_service = WhiteboardService(adk_service)
         assessment_service = AssessmentService()
+        progress_service = ProgressService(assessment_service)
+        diagram_service = DiagramService(adk_service, whiteboard_service)
+        
+        # Initialize MCP for diagram service
+        try:
+            await diagram_service.initialize_mcp()
+            logger.info("DiagramService MCP initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize MCP for DiagramService: {e}")
+            logger.info("DiagramService will fall back to mock PNG generation")
+
+        # Connect diagram service to ADK service for auto-generation
+        adk_service.set_diagram_service(diagram_service)
+        logger.info("Connected DiagramService to ADK for auto-generation")
+
+        # Store services in app state for dependency injection
+        app.state.adk_service = adk_service
+        app.state.whiteboard_service = whiteboard_service
         app.state.assessment_service = assessment_service
-        app.state.progress_service = ProgressService(assessment_service)
+        app.state.progress_service = progress_service
+        app.state.diagram_service = diagram_service
+
         yield
     except Exception as e:
         # Log startup error but don't crash the app
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.error(f"Failed to initialize services: {e}")
         adk_service = None
         whiteboard_service = None
         assessment_service = None
+        progress_service = None
+        diagram_service = None
         yield
     finally:
         # Shutdown - cleanup resources
+        if diagram_service:
+            await diagram_service.cleanup_mcp()
         if adk_service:
             await adk_service.cleanup()
 
@@ -668,6 +699,21 @@ app.include_router(
     progress_router,
     prefix="/api",
     tags=["progress"]
+)
+
+
+# Whiteboard API endpoints
+app.include_router(
+    whiteboard_router,
+    prefix="/api",
+    tags=["whiteboard"]
+)
+
+# Diagram API endpoints
+app.include_router(
+    diagrams_router,
+    prefix="/api",
+    tags=["diagrams"]
 )
 
 

@@ -10,6 +10,7 @@ import { ScrollArea } from './ui/scroll-area'
 import { Separator } from './ui/separator'
 import { Send, Bot, User, AlertCircle } from 'lucide-react'
 import { AssessmentButton } from './AssessmentButton'
+import { VoiceInterface } from './VoiceInterface'
 
 export interface Message {
     id: string
@@ -258,7 +259,7 @@ export function ChatInterface({
             {/* Input Form */}
             <Card>
                 <CardContent className="p-6 pt-4">
-                    <form onSubmit={handleSubmit} className="flex gap-2">
+                    <form onSubmit={handleSubmit} className="flex gap-2 items-center">
                         <Input
                             ref={inputRef}
                             value={inputValue}
@@ -270,6 +271,7 @@ export function ChatInterface({
                             aria-label="Type your message"
                             data-testid="message-input"
                         />
+                        <VoiceInterface inline />
                         <Button
                             type="submit"
                             disabled={!inputValue.trim() || isLoading || isSubmitting}

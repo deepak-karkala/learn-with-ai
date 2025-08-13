@@ -10,6 +10,11 @@ jest.mock('lucide-react', () => ({
     AlertCircle: () => <span data-testid="alert-icon">Alert</span>,
 }))
 
+// Mock the VoiceInterface to avoid media APIs in tests
+jest.mock('../components/VoiceInterface', () => ({
+    VoiceInterface: () => <div data-testid="voice-interface" />,
+}))
+
 describe('ChatInterface', () => {
     const mockOnSendMessage = jest.fn().mockResolvedValue(undefined)
     const mockMessages: Message[] = [
@@ -37,6 +42,11 @@ describe('ChatInterface', () => {
         expect(screen.getByText('Welcome to System Design Learning!')).toBeInTheDocument()
         expect(screen.getByPlaceholderText('Ask about system design concepts, architecture patterns, or start drawing...')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument()
+    })
+
+    it('renders voice interface button', () => {
+        render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />)
+        expect(screen.getByTestId('voice-interface')).toBeInTheDocument()
     })
 
     it('displays messages correctly', () => {

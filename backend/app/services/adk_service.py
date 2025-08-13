@@ -205,6 +205,7 @@ You are an expert system design interviewer and tutor. Your role is to:
 - Remember context from previous messages in the conversation
 - Ask one question at a time to avoid overwhelming the user
 - Provide specific examples when explaining concepts
+- **IMPORTANT: Always respond in English language only**
 
 **Session Context:**
 You have access to the conversation history through the session state. Use this to:
@@ -1291,6 +1292,9 @@ Generate the Mermaid diagram code now:"""
     async def stream_voice(self, audio_data: bytes) -> Tuple[bool, bytes | str]:
         """Handle audio streaming using ADK's Live API.
 
+        DEPRECATED: This method is deprecated in favor of WebSocket-based voice streaming.
+        Use the /api/voice WebSocket endpoint for real-time bidirectional voice communication.
+        
         Streams raw audio bytes to the ADK Live API and returns audio bytes in
         response. If the model fails to return audio, a textual message is
         provided so clients can fall back to text interactions.
@@ -1305,27 +1309,25 @@ Generate the Mermaid diagram code now:"""
                 app_name=self.app_name, user_id="voice_user", state={}
             )
 
-            # Configure run for bidirectional audio streaming
+            # Configure run for audio-only response (updated for Live API compatibility)
             run_config = RunConfig(
-                response_modalities=["AUDIO", "TEXT"],
+                response_modalities=["AUDIO"],  # Audio only for Live API compatibility
                 input_audio_transcription=AudioTranscriptionConfig(),
                 output_audio_transcription=AudioTranscriptionConfig(),
                 realtime_input_config=RealtimeInputConfig(),
                 streaming_mode=StreamingMode.BIDI,
             )
 
-            live_request_queue = LiveRequestQueue()
+            live_request_queue = await self._get_or_create_queue("legacy_voice_session")
             live_events = runner.run_live(
                 session=session,
                 live_request_queue=live_request_queue,
                 run_config=run_config,
             )
 
-            # Send audio to ADK
-            blob = Blob(data=audio_data, mime_type="audio/wav")
-            live_request_queue.send_activity_start()
+            # Send audio to ADK (no explicit activity control - let automatic detection handle it)
+            blob = Blob(data=audio_data, mime_type="audio/pcm;rate=16000")
             live_request_queue.send_realtime(blob)
-            live_request_queue.send_activity_end()
             live_request_queue.close()
 
             audio_response = b""
@@ -1348,8 +1350,8 @@ Generate the Mermaid diagram code now:"""
             if audio_response:
                 return True, audio_response
             if text_fallback:
-                return False, text_fallback
-            return False, "No audio response"
+                return False, "no audio response, got text: " + text_fallback
+            return False, "no audio response"
         except Exception as exc:
             logger.error(f"Voice streaming failed: {exc}", exc_info=True)
             return False, "Voice processing unavailable"

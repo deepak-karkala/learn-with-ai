@@ -1,6 +1,8 @@
 """Tests for voice streaming WebSocket endpoint."""
 
 import asyncio
+import json
+import base64
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
@@ -19,13 +21,21 @@ class DummySessionService:
         return DummySession()
 
 
+class DummyQueue:
+    def send_realtime(self, blob):
+        pass
+    
+    def close(self):
+        pass
+
+
 class AudioRunner:
     def __init__(self):
         self.session_service = DummySessionService()
 
     def run_live(self, *, session, live_request_queue, run_config):
         async def generator():
-            blob = Blob(data=b"audio_out", mime_type="audio/wav")
+            blob = Blob(data=b"audio_out", mime_type="audio/pcm;rate=24000")
             content = Content(parts=[Part(inline_data=blob)])
             event = type("Event", (), {"content": content, "turn_complete": True})
             yield event
@@ -50,21 +60,44 @@ class TestVoiceAPI:
     def test_voice_streaming(self, monkeypatch):
         service = ADKService()
         monkeypatch.setattr(service, "_get_or_create_runner", AsyncMock(return_value=AudioRunner()))
+        monkeypatch.setattr(service, "_get_or_create_queue", AsyncMock(return_value=DummyQueue()))
         app.state.adk_service = service
 
         with self.client.websocket_connect("/api/voice") as websocket:
-            websocket.send_text("auth_token_here")
-            websocket.send_bytes(b"audio_in")
-            response = websocket.receive_bytes()
-            assert response == b"audio_out"
+            # Send JSON message as per Gemini Live API format
+            audio_message = {
+                "mime_type": "audio/pcm;rate=16000",
+                "data": base64.b64encode(b"audio_in").decode('utf-8')
+            }
+            websocket.send_text(json.dumps(audio_message))
+            
+            # Receive JSON response
+            response_text = websocket.receive_text()
+            response_data = json.loads(response_text)
+            
+            assert response_data["mime_type"] == "audio/pcm"
+            assert "data" in response_data
+            # Decode and verify audio data
+            audio_data = base64.b64decode(response_data["data"])
+            assert audio_data == b"audio_out"
 
     def test_voice_streaming_fallback(self, monkeypatch):
         service = ADKService()
         monkeypatch.setattr(service, "_get_or_create_runner", AsyncMock(return_value=TextRunner()))
+        monkeypatch.setattr(service, "_get_or_create_queue", AsyncMock(return_value=DummyQueue()))
         app.state.adk_service = service
 
         with self.client.websocket_connect("/api/voice") as websocket:
-            websocket.send_text("auth_token_here")
-            websocket.send_bytes(b"audio_in")
-            text = websocket.receive_text()
-            assert "fallback" in text
+            # Send JSON message as per Gemini Live API format
+            audio_message = {
+                "mime_type": "audio/pcm;rate=16000",
+                "data": base64.b64encode(b"audio_in").decode('utf-8')
+            }
+            websocket.send_text(json.dumps(audio_message))
+            
+            # Receive JSON text response
+            response_text = websocket.receive_text()
+            response_data = json.loads(response_text)
+            
+            assert response_data["mime_type"] == "text/plain"
+            assert "fallback" in response_data["data"]

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     google_cloud_location: str = "us-central1"
 
     # ADK Agent Configuration
-    adk_model_name: str = "gemini-2.0-flash-exp"
+    adk_model_name: str = "gemini-live-2.5-flash-preview"
 
     # Multimodal Analysis Configuration
     multimodal_model_name: str = "gpt-4o"
@@ -132,7 +132,7 @@ def get_settings() -> Settings:
             google_api_key=None,
             google_cloud_project=None,
             google_cloud_location="us-central1",
-            adk_model_name="gemini-2.0-flash-exp",
+            adk_model_name="gemini-live-2.5-flash-preview",
             multimodal_model_name="gemini-2.0-flash-exp",
             multimodal_analysis_timeout=60.0,
             multimodal_max_tokens=4000,

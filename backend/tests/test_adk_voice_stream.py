@@ -16,6 +16,14 @@ class DummySessionService:
         return DummySession()
 
 
+class DummyQueue:
+    def send_realtime(self, blob):
+        pass
+    
+    def close(self):
+        pass
+
+
 class AudioRunner:
     """Runner that yields an audio response"""
 
@@ -45,6 +53,7 @@ class TextRunner(AudioRunner):
 def test_stream_voice_returns_audio(monkeypatch):
     service = ADKService()
     monkeypatch.setattr(service, "_get_or_create_runner", AsyncMock(return_value=AudioRunner()))
+    monkeypatch.setattr(service, "_get_or_create_queue", AsyncMock(return_value=DummyQueue()))
     success, payload = asyncio.run(service.stream_voice(b"audio_in"))
     assert success is True
     assert payload == b"audio_out"
@@ -53,6 +62,7 @@ def test_stream_voice_returns_audio(monkeypatch):
 def test_stream_voice_fallback_to_text(monkeypatch):
     service = ADKService()
     monkeypatch.setattr(service, "_get_or_create_runner", AsyncMock(return_value=TextRunner()))
+    monkeypatch.setattr(service, "_get_or_create_queue", AsyncMock(return_value=DummyQueue()))
     success, payload = asyncio.run(service.stream_voice(b"audio_in"))
     assert success is False
     assert "no audio" in payload

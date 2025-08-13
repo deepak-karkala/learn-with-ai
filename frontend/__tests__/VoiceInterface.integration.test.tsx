@@ -4,13 +4,16 @@ import { VoiceInterface } from '../components/VoiceInterface'
 
 class MockMediaRecorder {
   public ondataavailable: ((e: any) => void) | null = null
+  public onstop: (() => void) | null = null
   constructor(_stream: MediaStream) {}
   start() {
     setTimeout(() => {
       this.ondataavailable && this.ondataavailable({ data: new Blob(['audio']) })
     }, 0)
   }
-  stop() {}
+  stop() {
+    this.onstop && this.onstop()
+  }
 }
 
 class MockWebSocket {
@@ -45,6 +48,8 @@ describe('VoiceInterface integration', () => {
     await waitFor(() => {
       expect(screen.getByText('Recording...')).toBeInTheDocument()
     })
+
+    fireEvent.click(button)
 
     const buffer = new ArrayBuffer(8)
     wsInstance.onmessage && wsInstance.onmessage({ data: buffer })

@@ -1322,7 +1322,7 @@ Generate the Mermaid diagram code now:"""
             )
 
             # Send audio to ADK
-            blob = Blob(data=audio_data, mime_type="audio/wav")
+            blob = Blob(data=audio_data, mime_type="audio/webm")
             live_request_queue.send_activity_start()
             live_request_queue.send_realtime(blob)
             live_request_queue.send_activity_end()

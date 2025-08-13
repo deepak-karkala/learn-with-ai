@@ -21,6 +21,7 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
+  const chunksRef = useRef<Blob[]>([])
   const [level, setLevel] = useState(0)
 
   const startRecording = async () => {
@@ -32,7 +33,7 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
       analyserRef.current = audioContextRef.current.createAnalyser()
       source.connect(analyserRef.current)
 
-      const mediaRecorder = new MediaRecorder(stream)
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
       mediaRecorderRef.current = mediaRecorder
 
       const wsUrl = process.env.NEXT_PUBLIC_VOICE_WS_URL || 'ws://localhost:8000/api/voice'
@@ -41,18 +42,30 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
       socketRef.current = socket
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          socket.send(e.data)
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data)
         }
       }
 
-      socket.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-        const blob = new Blob([event.data], { type: 'audio/webm' })
-        const url = URL.createObjectURL(blob)
-        if (audioRef.current) {
-          audioRef.current.src = url
-          audioRef.current.play().catch(() => {})
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        chunksRef.current = []
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(blob)
         }
+      }
+
+      socket.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
+        if (event.data instanceof ArrayBuffer) {
+          const blob = new Blob([event.data], { type: 'audio/webm' })
+          const url = URL.createObjectURL(blob)
+          if (audioRef.current) {
+            audioRef.current.src = url
+            audioRef.current.play().catch(() => {})
+          }
+        }
+        setStatus('idle')
+        socket.close()
       }
 
       mediaRecorder.start(250)
@@ -65,9 +78,7 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
 
   const stopRecording = () => {
     mediaRecorderRef.current?.stop()
-    socketRef.current?.close()
     setStatus('processing')
-    setTimeout(() => setStatus('idle'), 500)
   }
 
   const handleRecord = () => {

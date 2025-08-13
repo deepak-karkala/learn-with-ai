@@ -6,10 +6,13 @@ test.beforeEach(async ({ page }) => {
     // @ts-ignore
     window.MediaRecorder = class {
       ondataavailable: (e: any) => void = () => {}
+      onstop: () => void = () => {}
       start() {
         setTimeout(() => this.ondataavailable({ data: new Blob(['audio']) }), 0)
       }
-      stop() {}
+      stop() {
+        this.onstop()
+      }
     }
   })
 })

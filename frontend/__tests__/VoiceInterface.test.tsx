@@ -5,14 +5,16 @@ import { VoiceInterface } from '../components/VoiceInterface'
 // Simple mocks for browser APIs
 class MockMediaRecorder {
   public ondataavailable: ((e: any) => void) | null = null
+  public onstop: (() => void) | null = null
   constructor(_stream: MediaStream) {}
   start() {
-    // simulate async chunk
     setTimeout(() => {
       this.ondataavailable && this.ondataavailable({ data: new Blob(['audio']) })
     }, 0)
   }
-  stop() {}
+  stop() {
+    this.onstop && this.onstop()
+  }
 }
 
 class MockWebSocket {
@@ -38,6 +40,9 @@ HTMLMediaElement.prototype.play = jest.fn().mockResolvedValue(undefined)
 
 describe('VoiceInterface', () => {
   it('voice recording starts and stops', async () => {
+    const wsInstance = new MockWebSocket('')
+    ;(global as any).WebSocket = jest.fn(() => wsInstance)
+
     render(<VoiceInterface />)
     const button = screen.getByTestId('record-button')
 

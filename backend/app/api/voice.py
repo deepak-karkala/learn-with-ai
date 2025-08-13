@@ -1,7 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Tuple
 
 router = APIRouter()
+
 
 @router.websocket("/voice")
 async def voice_stream(websocket: WebSocket) -> None:
@@ -9,15 +9,28 @@ async def voice_stream(websocket: WebSocket) -> None:
     await websocket.accept()
     # Access ADK service from app state
     adk_service = getattr(websocket.app.state, "adk_service", None)
+
     try:
-        # First message expected to be auth token
-        await websocket.receive_text()
         while True:
-            audio_in = await websocket.receive_bytes()
+            message = await websocket.receive()
+
+            # Client disconnected
+            if message.get("type") == "websocket.disconnect":
+                break
+
+            # Ignore text frames (e.g., auth tokens or keep-alives)
+            if message.get("text") is not None:
+                continue
+
+            audio_in = message.get("bytes")
+            if not audio_in:
+                continue
+
             if adk_service is None:
                 # Fallback to text when service unavailable
                 await websocket.send_text("Voice service unavailable")
                 continue
+
             success, result = await adk_service.stream_voice(audio_in)
             if success:
                 await websocket.send_bytes(result)

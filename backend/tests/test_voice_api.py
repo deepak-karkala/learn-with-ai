@@ -53,7 +53,6 @@ class TestVoiceAPI:
         app.state.adk_service = service
 
         with self.client.websocket_connect("/api/voice") as websocket:
-            websocket.send_text("auth_token_here")
             websocket.send_bytes(b"audio_in")
             response = websocket.receive_bytes()
             assert response == b"audio_out"
@@ -64,7 +63,6 @@ class TestVoiceAPI:
         app.state.adk_service = service
 
         with self.client.websocket_connect("/api/voice") as websocket:
-            websocket.send_text("auth_token_here")
             websocket.send_bytes(b"audio_in")
             text = websocket.receive_text()
             assert "fallback" in text

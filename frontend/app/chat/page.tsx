@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { ChatInterface } from '../../components/ChatInterface'
 import { WhiteboardCanvas } from '../../components/WhiteboardCanvas'
-import { VoiceInterface } from '../../components/VoiceInterface'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { ChevronLeft, ChevronRight, MessageSquare, Palette, Target, X } from 'lucide-react'
@@ -285,9 +284,6 @@ export default function ChatPage() {
                         </div>
 
                         <div className="flex-1 overflow-hidden">
-                            <div className="mb-4">
-                                <VoiceInterface />
-                            </div>
                             <ChatInterface
                                 messages={messages}
                                 onSendMessage={handleSendMessage}

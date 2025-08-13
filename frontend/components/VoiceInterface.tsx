@@ -2,8 +2,18 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { Button } from './ui/button'
+import { Mic, Square } from 'lucide-react'
 
-export function VoiceInterface() {
+interface VoiceInterfaceProps {
+  /**
+   * When true, renders a compact inline button suitable for toolbars
+   * (e.g. next to the chat send button). Status text and level meter are
+   * hidden, but audio playback still functions.
+   */
+  inline?: boolean
+}
+
+export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
   const [status, setStatus] = useState<'idle' | 'recording' | 'processing'>('idle')
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -93,20 +103,33 @@ export function VoiceInterface() {
   }, [status])
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <Button data-testid="record-button" onClick={handleRecord}>
-        {status === 'recording' ? 'Stop' : 'Record'}
+    <div className={inline ? 'flex items-center' : 'flex flex-col items-center gap-2'}>
+      <Button
+        data-testid="record-button"
+        onClick={handleRecord}
+        size={inline ? 'icon' : undefined}
+        aria-label={status === 'recording' ? 'Stop recording' : 'Start recording'}
+      >
+        {status === 'recording'
+          ? inline
+            ? <Square className="h-4 w-4" />
+            : 'Stop'
+          : inline
+            ? <Mic className="h-4 w-4" />
+            : 'Record'}
       </Button>
-      {status === 'recording' && <div>Recording...</div>}
-      {status === 'processing' && <div>Processing...</div>}
-      {permissionError && <div className="text-red-500">{permissionError}</div>}
-      <div className="h-2 w-32 bg-gray-200" aria-label="voice-level">
-        <div
-          className="h-2 bg-green-500"
-          style={{ width: `${Math.min(level * 100, 100)}%` }}
-          data-testid="vad-bar"
-        />
-      </div>
+      {!inline && status === 'recording' && <div>Recording...</div>}
+      {!inline && status === 'processing' && <div>Processing...</div>}
+      {!inline && permissionError && <div className="text-red-500">{permissionError}</div>}
+      {!inline && (
+        <div className="h-2 w-32 bg-gray-200" aria-label="voice-level">
+          <div
+            className="h-2 bg-green-500"
+            style={{ width: `${Math.min(level * 100, 100)}%` }}
+            data-testid="vad-bar"
+          />
+        </div>
+      )}
       <audio ref={audioRef} data-testid="playback" />
     </div>
   )

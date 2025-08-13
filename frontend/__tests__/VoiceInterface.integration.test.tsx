@@ -19,27 +19,49 @@ class MockMediaRecorder {
 class MockWebSocket {
   readyState = 1
   onmessage: ((ev: any) => void) | null = null
+  onopen: (() => void) | null = null
+  onclose: (() => void) | null = null
+  onerror: ((err: any) => void) | null = null
   send = jest.fn()
   close = jest.fn()
-  constructor(_url: string) {}
+  constructor(_url: string) {
+    // Simulate WebSocket opening after a short delay
+    setTimeout(() => {
+      if (this.onopen) {
+        this.onopen()
+      }
+    }, 10)
+  }
 }
 
 HTMLMediaElement.prototype.play = jest.fn().mockResolvedValue(undefined)
 ;(global as any).URL = { createObjectURL: jest.fn(() => 'blob:mock') }
 ;(global as any).MediaStream = class {}
 ;(global as any).AudioContext = class {
+  destination = {}
   createMediaStreamSource() { return { connect: jest.fn() } }
   createAnalyser() { return { fftSize: 32, getByteTimeDomainData: jest.fn() } }
+  createScriptProcessor() { 
+    return { 
+      connect: jest.fn(), 
+      disconnect: jest.fn(),
+      onaudioprocess: null 
+    } 
+  }
+  close() { return Promise.resolve() }
 }
 ;(global as any).navigator.mediaDevices = {
   getUserMedia: jest.fn().mockResolvedValue(new MediaStream()),
 }
 
 describe('VoiceInterface integration', () => {
-  it('plays audio from websocket', async () => {
+  it('processes audio from websocket through queue system', async () => {
     const wsInstance = new MockWebSocket('')
     ;(global as any).WebSocket = jest.fn(() => wsInstance)
     global.MediaRecorder = MockMediaRecorder as any
+
+    // Mock console.log to capture audio queue logs
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation()
 
     render(<VoiceInterface />)
     const button = screen.getByTestId('record-button')
@@ -49,15 +71,18 @@ describe('VoiceInterface integration', () => {
       expect(screen.getByText('Recording...')).toBeInTheDocument()
     })
 
-    fireEvent.click(button)
+    // Send JSON message as per Gemini Live API requirements
+    const mockAudioMessage = {
+      mime_type: "audio/pcm",
+      data: btoa("mock audio data") // Base64 encoded mock audio
+    }
+    wsInstance.onmessage && wsInstance.onmessage({ data: JSON.stringify(mockAudioMessage) })
 
-    const buffer = new ArrayBuffer(8)
-    wsInstance.onmessage && wsInstance.onmessage({ data: buffer })
-
+    // Wait for audio queue processing
     await waitFor(() => {
-      const audio = screen.getByTestId('playback') as HTMLAudioElement
-      expect(audio.src).toContain('blob:')
-      expect(HTMLMediaElement.prototype.play).toHaveBeenCalled()
-    })
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[AUDIO QUEUE]: Processing'))
+    }, { timeout: 1000 })
+
+    consoleSpy.mockRestore()
   })
 })

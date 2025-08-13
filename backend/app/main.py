@@ -38,6 +38,7 @@ from app.services.progress_service import ProgressService
 from app.api.progress import router as progress_router
 from app.services.diagram_service import DiagramService
 from app.api.diagrams import router as diagrams_router
+from app.api.voice import router as voice_router
 from app.services.config import settings, setup_logging
 
 # Load environment variables
@@ -714,6 +715,13 @@ app.include_router(
     diagrams_router,
     prefix="/api",
     tags=["diagrams"]
+)
+
+# Voice API endpoints
+app.include_router(
+    voice_router,
+    prefix="/api",
+    tags=["voice"]
 )
 
 

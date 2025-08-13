@@ -8,15 +8,21 @@ import logging
 import os
 import time
 import warnings
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from weakref import WeakValueDictionary
 
 from google.adk.agents import Agent, LiveRequestQueue
-from google.adk.agents.run_config import RunConfig
+from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.runners import InMemoryRunner
 
 # from google.adk.sessions import InMemorySessionService  # Not directly used
-from google.genai.types import Content, Part
+from google.genai.types import (
+    AudioTranscriptionConfig,
+    Content,
+    Part,
+    RealtimeInputConfig,
+    Blob,
+)
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -1281,6 +1287,72 @@ Generate the Mermaid diagram code now:"""
         else:
             logger.warning(f"Could not find a Mermaid code block in the response. Returning the full response. Response: {response_text}")
             return response_text
+
+    async def stream_voice(self, audio_data: bytes) -> Tuple[bool, bytes | str]:
+        """Handle audio streaming using ADK's Live API.
+
+        Streams raw audio bytes to the ADK Live API and returns audio bytes in
+        response. If the model fails to return audio, a textual message is
+        provided so clients can fall back to text interactions.
+        """
+        try:
+            if not self.agent:
+                raise RuntimeError("ADK agent not initialized")
+
+            # Create runner and session for this streaming request
+            runner = await self._get_or_create_runner("voice_user")
+            session = await runner.session_service.create_session(
+                app_name=self.app_name, user_id="voice_user", state={}
+            )
+
+            # Configure run for bidirectional audio streaming
+            run_config = RunConfig(
+                response_modalities=["AUDIO", "TEXT"],
+                input_audio_transcription=AudioTranscriptionConfig(),
+                output_audio_transcription=AudioTranscriptionConfig(),
+                realtime_input_config=RealtimeInputConfig(),
+                streaming_mode=StreamingMode.BIDI,
+            )
+
+            live_request_queue = LiveRequestQueue()
+            live_events = runner.run_live(
+                session=session,
+                live_request_queue=live_request_queue,
+                run_config=run_config,
+            )
+
+            # Send audio to ADK
+            blob = Blob(data=audio_data, mime_type="audio/wav")
+            live_request_queue.send_activity_start()
+            live_request_queue.send_realtime(blob)
+            live_request_queue.send_activity_end()
+            live_request_queue.close()
+
+            audio_response = b""
+            text_fallback = ""
+
+            async for event in live_events:
+                if getattr(event, "content", None) and event.content.parts:
+                    for part in event.content.parts:
+                        if getattr(part, "inline_data", None) and (
+                            part.inline_data.mime_type or ""
+                        ).startswith("audio"):
+                            audio_response += part.inline_data.data or b""
+                        elif getattr(part, "text", None):
+                            text_fallback += part.text
+
+                # Stop once turn is complete after processing content
+                if getattr(event, "turn_complete", False):
+                    break
+
+            if audio_response:
+                return True, audio_response
+            if text_fallback:
+                return False, text_fallback
+            return False, "No audio response"
+        except Exception as exc:
+            logger.error(f"Voice streaming failed: {exc}", exc_info=True)
+            return False, "Voice processing unavailable"
 
     def health_check(self) -> Dict[str, Any]:
         """Check if the ADK service is properly configured and ready"""

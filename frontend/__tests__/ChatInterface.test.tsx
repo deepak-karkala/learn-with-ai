@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from './test-utils'
 import { ChatInterface, Message } from '../components/ChatInterface'
 
 // Mock the lucide-react icons
@@ -39,8 +39,8 @@ describe('ChatInterface', () => {
     it('renders correctly with no messages', () => {
         render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />)
 
-        expect(screen.getByText('Welcome to System Design Learning!')).toBeInTheDocument()
-        expect(screen.getByPlaceholderText('Ask about system design concepts, architecture patterns, or start drawing...')).toBeInTheDocument()
+        expect(screen.getByText('Welcome to your interview!')).toBeInTheDocument()
+        expect(screen.getByPlaceholderText('Discuss your approach, ask clarifying questions...')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument()
     })
 
@@ -59,7 +59,7 @@ describe('ChatInterface', () => {
     it('sends message when form submitted', async () => {
         render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />)
 
-        const input = screen.getByPlaceholderText('Ask about system design concepts, architecture patterns, or start drawing...')
+        const input = screen.getByPlaceholderText('Discuss your approach, ask clarifying questions...')
         const button = screen.getByRole('button', { name: /send/i })
 
         fireEvent.change(input, { target: { value: 'Hello' } })
@@ -73,7 +73,7 @@ describe('ChatInterface', () => {
     it('sends message when Enter key pressed', async () => {
         render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />)
 
-        const input = screen.getByPlaceholderText('Ask about system design concepts, architecture patterns, or start drawing...')
+        const input = screen.getByPlaceholderText('Discuss your approach, ask clarifying questions...')
         const form = input.closest('form')
 
         fireEvent.change(input, { target: { value: 'Hello' } })
@@ -87,7 +87,7 @@ describe('ChatInterface', () => {
     it('does not send message when Shift+Enter pressed', () => {
         render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />)
 
-        const input = screen.getByPlaceholderText('Ask about system design concepts, architecture patterns, or start drawing...')
+        const input = screen.getByPlaceholderText('Discuss your approach, ask clarifying questions...')
 
         fireEvent.change(input, { target: { value: 'Hello\nWorld' } })
         fireEvent.keyPress(input, { key: 'Enter', code: 'Enter', shiftKey: true })
@@ -98,7 +98,7 @@ describe('ChatInterface', () => {
     it('disables input and button when loading', () => {
         render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} isLoading={true} />)
 
-        const input = screen.getByPlaceholderText('Ask about system design concepts, architecture patterns, or start drawing...')
+        const input = screen.getByPlaceholderText('Discuss your approach, ask clarifying questions...')
         const button = screen.getByRole('button', { name: /send/i })
 
         expect(input).toBeDisabled()
@@ -113,7 +113,8 @@ describe('ChatInterface', () => {
     })
 
     it('displays typing indicator when isTyping is true', () => {
-        render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} isTyping={true} />)
+        // Typing indicator only shows when there are messages, so add a message first
+        render(<ChatInterface messages={mockMessages} onSendMessage={mockOnSendMessage} isTyping={true} />)
 
         expect(screen.getByText('AI is typing...')).toBeInTheDocument()
     })
@@ -121,7 +122,7 @@ describe('ChatInterface', () => {
     it('clears input after sending message', async () => {
         render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />)
 
-        const input = screen.getByPlaceholderText('Ask about system design concepts, architecture patterns, or start drawing...')
+        const input = screen.getByPlaceholderText('Discuss your approach, ask clarifying questions...')
         const button = screen.getByRole('button', { name: /send/i })
 
         fireEvent.change(input, { target: { value: 'Hello' } })
@@ -143,10 +144,12 @@ describe('ChatInterface', () => {
         expect(mockOnSendMessage).not.toHaveBeenCalled()
     })
 
-    it('displays message count correctly', () => {
+    it('displays messages correctly', () => {
         render(<ChatInterface messages={mockMessages} onSendMessage={mockOnSendMessage} />)
 
-        expect(screen.getByText('2 messages')).toBeInTheDocument()
+        // Just verify that messages are displayed
+        expect(screen.getByText('Hello, how are you?')).toBeInTheDocument()
+        expect(screen.getByText('I\'m doing well, thank you! How can I help you with system design today?')).toBeInTheDocument()
     })
 
     it('displays assessment scores when available', () => {

@@ -11,6 +11,7 @@ import { Separator } from './ui/separator'
 import { Send, Bot, User, AlertCircle } from 'lucide-react'
 import { AssessmentButton } from './AssessmentButton'
 import { VoiceInterface } from './VoiceInterface'
+import { useTheme } from '@/contexts/ThemeContext'
 
 export interface Message {
     id: string
@@ -40,6 +41,7 @@ interface ChatInterfaceProps {
     error?: null
     isTyping?: boolean
     className?: string
+    showAssessmentButton?: boolean
 }
 
 export function ChatInterface({
@@ -49,19 +51,31 @@ export function ChatInterface({
     isLoading = false,
     error = null,
     isTyping = false,
-    className = ''
+    className = '',
+    showAssessmentButton = false
 }: ChatInterfaceProps) {
+    const { theme } = useTheme()
     const [inputValue, setInputValue] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const scrollAreaRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        if (scrollAreaRef.current) {
+            const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
+            if (scrollElement) {
+                scrollElement.scrollTop = scrollElement.scrollHeight
+            }
+        }
     }
 
     useEffect(() => {
-        scrollToBottom()
+        // Only auto-scroll to bottom if there are messages
+        if (messages.length > 0) {
+            // Use setTimeout to ensure DOM has updated
+            setTimeout(scrollToBottom, 100)
+        }
     }, [messages])
 
     useEffect(() => {
@@ -120,8 +134,15 @@ export function ChatInterface({
                 )}
 
                 <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
-                    <Card className={`${isUser ? 'bg-blue-600 text-white' : 'bg-gray-50'}`}>
-                        <CardContent className="p-3">
+                    <Card className={`transition-all duration-200 ${
+                        isUser 
+                            ? 'bg-blue-600 text-white shadow-lg' 
+                            : (theme === 'dark' 
+                                ? 'bg-gray-700 border-gray-600 text-white shadow-sm' 
+                                : 'bg-white border-gray-200 shadow-sm'
+                              )
+                    }`}>
+                        <CardContent className="p-4">
                             <div className="flex items-start justify-between gap-2">
                                 <p
                                     className="text-sm leading-relaxed"
@@ -164,83 +185,73 @@ export function ChatInterface({
     }
 
     return (
-        <div className={`flex flex-col h-full max-w-4xl mx-auto ${className}`}>
-            {/* Header */}
-            <Card className="mb-4">
-                <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                            <CardTitle className="flex items-center gap-2">
-                                <Bot className="w-5 h-5" />
-                                AI System Design Learning Assistant
-                            </CardTitle>
-                        </div>
-                        <Badge variant="secondary">
-                            {messages.length} messages
-                        </Badge>
-                    </div>
-                </CardHeader>
-            </Card>
-
-            {/* Messages */}
-            <ScrollArea className="flex-1 mb-4 px-2">
-                <div className="space-y-4">
+        <div className={`flex flex-col h-full ${className}`}>
+            {/* Messages Area - Only this scrolls */}
+            <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 px-4">
+                <div className="space-y-4 py-4">
                     {messages.length === 0 ? (
-                        <div className="text-center text-gray-500 py-8">
-                            <div className="text-4xl mb-4">🎯</div>
-                            <h3 className="text-lg font-semibold mb-2">
-                                Welcome to System Design Learning!
+                        <div className={`text-center py-6 px-3 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="text-3xl mb-3">👋</div>
+                            <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                Welcome to your interview!
                             </h3>
-                            <p className="text-sm mb-4">
-                                Start a conversation to learn about system design concepts, architecture patterns, and best practices.
+                            <p className={`text-sm mb-4 leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
+                                I'm your AI interviewer. Let's start by discussing a system design problem. Feel free to use the whiteboard to sketch your ideas!
                             </p>
-                            <div className="text-xs text-gray-400 space-y-1">
-                                <p>💡 Try asking about:</p>
-                                <p>• "How would you design a social media platform?"</p>
-                                <p>• "What are the key components of a microservices architecture?"</p>
-                                <p>• "How do you handle scalability in distributed systems?"</p>
+                            <div className={`rounded-xl p-3 border ${
+                                theme === 'dark' 
+                                    ? 'bg-gray-700 border-gray-600' 
+                                    : 'bg-blue-50 border-blue-200'
+                            }`}>
+                                <p className={`text-xs font-medium mb-2 ${theme === 'dark' ? 'text-gray-200' : 'text-blue-800'}`}>💡 Let's begin with:</p>
+                                <div className={`space-y-1 text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-blue-700'}`}>
+                                    <p>• "Design a URL shortener like bit.ly"</p>
+                                    <p>• "How would you scale a chat application?"</p>
+                                    <p>• "Design a recommendation system"</p>
+                                </div>
                             </div>
                         </div>
                     ) : (
-                        messages.map(renderMessage)
-                    )}
+                        <>
+                            {messages.map(renderMessage)}
 
-                    {isTyping && (
-                        <div className="flex gap-3 justify-start">
-                            <Avatar className="w-8 h-8">
-                                <AvatarFallback className="bg-blue-100 text-blue-600">
-                                    <Bot className="w-4 h-4" />
-                                </AvatarFallback>
-                            </Avatar>
-                            <Card className="bg-gray-50">
-                                <CardContent className="p-3">
-                                    <div className="flex items-center gap-1">
-                                        <div className="flex space-x-1">
-                                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                                        </div>
-                                        <span className="text-sm text-gray-500 ml-2">AI is typing...</span>
+                            {isTyping && (
+                                <div className="flex gap-3 justify-start">
+                                    <Avatar className="w-8 h-8">
+                                        <AvatarFallback className="bg-blue-100 text-blue-600">
+                                            <Bot className="w-4 h-4" />
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <Card className="bg-gray-50">
+                                        <CardContent className="p-3">
+                                            <div className="flex items-center gap-1">
+                                                <div className="flex space-x-1">
+                                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
+                                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                                                </div>
+                                                <span className="text-sm text-gray-500 ml-2">AI is typing...</span>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            )}
+
+                            {/* Assessment Button - Show after some messages or when explicitly enabled */}
+                            {((messages.length >= 2 && onRequestAssessment) || (showAssessmentButton && onRequestAssessment && messages.length > 0)) && (
+                                <div className="flex justify-center py-4">
+                                    <div className="text-center">
+                                        <p className="text-sm text-gray-600 mb-3">
+                                            Ready to evaluate your progress?
+                                        </p>
+                                        <AssessmentButton onRequestAssessment={onRequestAssessment} />
                                     </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    )}
+                                </div>
+                            )}
 
-                    {/* Assessment Button - Show after some messages */}
-                    {messages.length >= 2 && onRequestAssessment && (
-                        <div className="flex justify-center py-4">
-                            <div className="text-center">
-                                <p className="text-sm text-gray-600 mb-3">
-                                    Ready to evaluate your progress?
-                                </p>
-                                <AssessmentButton onRequestAssessment={onRequestAssessment} />
-                            </div>
-                        </div>
+                            <div ref={messagesEndRef} />
+                        </>
                     )}
-
-                    <div ref={messagesEndRef} />
                 </div>
             </ScrollArea>
 
@@ -257,36 +268,46 @@ export function ChatInterface({
             )}
 
             {/* Input Form */}
-            <Card>
-                <CardContent className="p-6 pt-4">
-                    <form onSubmit={handleSubmit} className="flex gap-2 items-center">
-                        <Input
-                            ref={inputRef}
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            placeholder="Ask about system design concepts, architecture patterns, or start drawing..."
-                            disabled={isLoading || isSubmitting}
-                            className="flex-1"
-                            aria-label="Type your message"
-                            data-testid="message-input"
-                        />
+            <div className="flex-shrink-0 px-4 pb-4">
+                <div className={`rounded-2xl shadow-lg p-3 border ${
+                    theme === 'dark' 
+                        ? 'bg-gray-700 border-gray-600' 
+                        : 'bg-white border-gray-200'
+                }`}>
+                    <form onSubmit={handleSubmit} className="flex gap-2 items-end">
+                        <div className="flex-1">
+                            <Input
+                                ref={inputRef}
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                placeholder="Discuss your approach, ask clarifying questions..."
+                                disabled={isLoading || isSubmitting}
+                                className={`border-0 focus:ring-0 focus:outline-none text-base p-3 rounded-xl resize-none ${
+                                    theme === 'dark' 
+                                        ? 'bg-gray-600 text-white placeholder:text-gray-400' 
+                                        : 'bg-gray-50 text-gray-900 placeholder:text-gray-500'
+                                }`}
+                                aria-label="Type your message"
+                                data-testid="message-input"
+                            />
+                        </div>
                         <VoiceInterface inline />
                         <Button
                             type="submit"
                             disabled={!inputValue.trim() || isLoading || isSubmitting}
-                            className="px-6"
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-all duration-200 shadow-md hover:shadow-lg"
                             data-testid="send-button"
                         >
                             <Send className="w-4 h-4 mr-2" />
                             Send
                         </Button>
                     </form>
-                    <div className="text-xs text-gray-500 mt-2 text-center">
+                    <div className={`text-xs mt-3 text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                         Press Enter to send, Shift+Enter for new line
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
         </div>
     )
 }

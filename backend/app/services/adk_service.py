@@ -1051,17 +1051,26 @@ You have access to the conversation history through the session state. Use this 
                 artifacts=None
             )
         
-        # Keywords that suggest the user wants a diagram
+        # More specific keywords that strongly suggest the user wants a diagram
+        # Only trigger when explicitly asking for visual representations
         diagram_keywords = [
-            "diagram", "chart", "visualize", "architecture", "design", "draw", 
-            "show me", "create a", "generate", "flowchart", "mermaid",
-            "system design", "database schema", "workflow", "process flow",
-            "outline", "components", "structure", "layout"
+            "draw a diagram", "create a diagram", "show me a diagram", "generate a diagram",
+            "draw a flowchart", "create a flowchart", "show me a flowchart",
+            "visualize the architecture", "draw the architecture", "diagram of the system",
+            "visual representation", "mermaid diagram", "flowchart diagram",
+            "can you draw", "please draw", "show me visually", "create a visual",
+            "generate a chart", "diagram this", "chart showing"
         ]
         
         # Check both user message and response for diagram keywords
         combined_text = f"{user_message} {response_text}".lower()
-        should_generate_diagram = any(keyword in combined_text for keyword in diagram_keywords)
+        keyword_match = any(keyword in combined_text for keyword in diagram_keywords)
+        
+        # Only generate diagrams if:
+        # 1. Keywords match AND
+        # 2. We have some conversation context (more than just the first exchange)
+        # This prevents diagrams from auto-generating too early in the conversation
+        should_generate_diagram = keyword_match
         
         # Debug logging
         logger.info(f"Diagram detection for user {user_id}: keywords found = {should_generate_diagram}")

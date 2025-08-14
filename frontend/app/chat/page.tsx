@@ -1,469 +1,503 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ChatInterface } from '../../components/ChatInterface'
-import { WhiteboardCanvas } from '../../components/WhiteboardCanvas'
-import { Button } from '../../components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
-import { ChevronLeft, ChevronRight, MessageSquare, Palette, Target, X } from 'lucide-react'
-import { AssessmentPanel } from '../../components/AssessmentPanel'
+import React, { useState, useEffect } from 'react'
+import { ChatInterface } from '@/components/ChatInterface'
+import { WhiteboardCanvas } from '@/components/WhiteboardCanvas'
+import { Sidebar } from '@/components/Sidebar'
+import { Button } from "@/components/ui/button"
+import { useTheme } from '@/contexts/ThemeContext'
 
 interface Message {
-    id: string
-    content: string
-    role: 'user' | 'assistant'
-    timestamp: Date
+  id: string
+  content: string
+  role: 'user' | 'assistant'
+  timestamp: Date
 }
 
-interface AnalysisResult {
-    components_identified: string[]
-    architectural_feedback: string
-    suggestions: string[]
-    confidence_score: number
-    cost_estimate?: number
-    tokens_used?: number
-    raw_analysis?: string
+interface AssessmentResult {
+  overall_score: number
+  dimension_scores: {
+    requirements_analysis: number
+    system_architecture: number
+    technical_deep_dive: number
+    scale_performance: number
+    reliability_fault_tolerance: number
+    communication_thought_process: number
+  }
+  feedback: string
+  strengths: string[]
+  improvement_areas: string[]
 }
 
 export default function ChatPage() {
-    const [messages, setMessages] = useState<Message[]>([])
-    const [isLoading, setIsLoading] = useState(false)
-    const [sessionId, setSessionId] = useState<string | null>(null)
-    const [whiteboardVisible, setWhiteboardVisible] = useState(true)
-    const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
-    const [isAnalyzing, setIsAnalyzing] = useState(false)
-    const [showFeedback, setShowFeedback] = useState(false)
-    const [assessmentResult, setAssessmentResult] = useState<any>(null)
-    const [isAssessmentLoading, setIsAssessmentLoading] = useState(false)
+  const { theme } = useTheme()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [sessionId, setSessionId] = useState<string>('')
+  const [sessions, setSessions] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [mobileActivePanel, setMobileActivePanel] = useState<'chat' | 'whiteboard'>('chat')
 
+  const userId = 'john@example.com' // This would come from auth context
 
-    // Mock user for development
-    const mockUser = { email: 'john@example.com' }
-
-    useEffect(() => {
-        // Load session ID from localStorage
-        const savedSessionId = localStorage.getItem(`sessionId:${mockUser.email}`)
-        if (savedSessionId) {
-            setSessionId(savedSessionId)
-        }
-    }, [mockUser.email])
-
-    useEffect(() => {
-        // Save session ID to localStorage when it changes
-        if (sessionId) {
-            localStorage.setItem(`sessionId:${mockUser.email}`, sessionId)
-        }
-    }, [sessionId, mockUser.email])
-
-    const handleSendMessage = async (message: string) => {
-        if (!message.trim()) return
-
-        const userMessage: Message = {
-            id: Date.now().toString(),
-            content: message,
-            role: 'user',
-            timestamp: new Date()
-        }
-
-        setMessages(prev => [...prev, userMessage])
-        setIsLoading(true)
-
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    message: message,
-                    user_id: mockUser.email,
-                    session_id: sessionId
-                }),
-            })
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`)
-            }
-
-            const data = await response.json()
-
-            // Extract session ID from response if provided
-            if (data.session_id && data.session_id !== sessionId) {
-                setSessionId(data.session_id)
-            }
-
-            const assistantMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                content: data.message,  // Backend returns 'message', not 'response'
-                role: 'assistant',
-                timestamp: new Date()
-            }
-
-            setMessages(prev => [...prev, assistantMessage])
-        } catch (error) {
-            console.error('Failed to send message:', error)
-            const errorMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                content: 'Sorry, I encountered an error. Please try again.',
-                role: 'assistant',
-                timestamp: new Date()
-            }
-            setMessages(prev => [...prev, errorMessage])
-        } finally {
-            setIsLoading(false)
-        }
+  useEffect(() => {
+    // Check if mobile
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    
+    // Load existing session from localStorage
+    const existingSessionId = localStorage.getItem(`sessionId:${userId}`)
+    if (existingSessionId) {
+      setSessionId(existingSessionId)
+      // TODO: Load session messages from API
+    } else {
+      // Generate new session ID
+      const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      setSessionId(newSessionId)
+      localStorage.setItem(`sessionId:${userId}`, newSessionId)
     }
 
-    const handleWhiteboardSave = async (pngData: string) => {
-        try {
-            setIsLoading(true)
-            const response = await fetch('/api/whiteboard/upload', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    png_data: pngData,
-                    user_id: mockUser.email || 'web_user',
-                    session_id: sessionId || undefined,
-                    description: 'System design whiteboard diagram'
-                }),
-            })
-            if (!response.ok) {
-                let errText = `Upload failed (${response.status})`
-                try { const errJson = await response.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
-                throw new Error(errText)
-            }
-            const data = await response.json()
-            console.log('PNG uploaded successfully:', data.artifact_id)
-            alert(`Whiteboard saved successfully! Artifact ID: ${data.artifact_id}`)
-        } catch (error) {
-            console.error('Failed to upload PNG:', error)
-            alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        } finally {
-            setIsLoading(false)
-        }
+    // Load sessions list
+    loadSessions()
+
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  const loadSessions = async () => {
+    // Mock sessions for development
+    const mockSessions = [
+      {
+        id: sessionId,
+        title: 'Current Session',
+        created_at: new Date().toISOString(),
+        message_count: messages.length
+      },
+      {
+        id: 'session_1',
+        title: 'Design Twitter Clone',
+        created_at: '2025-08-13T10:00:00Z',
+        message_count: 15
+      },
+      {
+        id: 'session_2',
+        title: 'Chat System Architecture',
+        created_at: '2025-08-12T14:30:00Z',
+        message_count: 22
+      },
+      {
+        id: 'session_3',
+        title: 'E-commerce Platform',
+        created_at: '2025-08-11T09:15:00Z',
+        message_count: 18
+      }
+    ]
+    setSessions(mockSessions)
+  }
+
+  const handleNewSession = () => {
+    const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    setSessionId(newSessionId)
+    setMessages([])
+    setAssessmentResult(null)
+    localStorage.setItem(`sessionId:${userId}`, newSessionId)
+    loadSessions()
+  }
+
+  const handleSelectSession = (selectedSessionId: string) => {
+    if (selectedSessionId === sessionId) return
+    
+    setSessionId(selectedSessionId)
+    setMessages([]) // In real app, load messages for this session
+    setAssessmentResult(null)
+    localStorage.setItem(`sessionId:${userId}`, selectedSessionId)
+  }
+
+  const handleSendMessage = async (message: string) => {
+    if (!message.trim()) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: message,
+      role: 'user',
+      timestamp: new Date()
     }
 
-    const handleWhiteboardAnalysis = async (pngData: string) => {
-        try {
-            setIsAnalyzing(true)
-            setShowFeedback(true)
+    setMessages(prev => [...prev, userMessage])
+    setIsLoading(true)
 
-            // First, upload the PNG to get an artifact ID
-            const uploadResponse = await fetch('/api/whiteboard/upload', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    png_data: pngData,
-                    user_id: mockUser.email || 'web_user',
-                    session_id: sessionId || undefined,
-                    description: 'System design whiteboard diagram for analysis'
-                }),
-            })
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message,
+          session_id: sessionId,
+          user_id: userId
+        }),
+      })
 
-            if (!uploadResponse.ok) {
-                let errText = `Upload failed (${uploadResponse.status})`
-                try { const errJson = await uploadResponse.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
-                throw new Error(errText)
-            }
+      if (!response.ok) {
+        throw new Error('Failed to send message')
+      }
 
-            const uploadData = await uploadResponse.json()
-            const artifactId = uploadData.artifact_id
+      const data = await response.json()
+      
+      // Update session ID if provided
+      if (data.session_id && data.session_id !== sessionId) {
+        setSessionId(data.session_id)
+        localStorage.setItem(`sessionId:${userId}`, data.session_id)
+      }
 
-            // Now analyze the uploaded artifact
-            const analysisResponse = await fetch('/api/whiteboard/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    artifact_id: artifactId,
-                    user_id: mockUser.email || 'web_user',
-                    session_id: sessionId || undefined,
-                    analysis_type: 'comprehensive'
-                }),
-            })
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: data.message,
+        role: 'assistant',
+        timestamp: new Date()
+      }
 
-            if (!analysisResponse.ok) {
-                let errText = `Analysis failed (${analysisResponse.status})`
-                try { const errJson = await analysisResponse.json(); errText = errJson?.detail || errJson?.message || errText; } catch (_) { }
-                throw new Error(errText)
-            }
+      setMessages(prev => [...prev, aiMessage])
+      loadSessions() // Refresh sessions list
+    } catch (error) {
+      console.error('Failed to send message:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: 'Sorry, I encountered an error. Please try again.',
+        role: 'assistant',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+      alert('Failed to send message. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-            const analysisData = await analysisResponse.json()
-            setAnalysisResult(analysisData)
-            console.log('Analysis completed:', analysisData)
-        } catch (error) {
-            console.error('Failed to analyze whiteboard:', error)
-            alert(`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        } finally {
-            setIsAnalyzing(false)
-        }
+  const handleRequestAssessment = async () => {
+    if (messages.length === 0) {
+      alert('Please have a conversation first before requesting an assessment.')
+      return
     }
 
-    const toggleWhiteboard = () => {
-        setWhiteboardVisible(!whiteboardVisible)
+    setIsLoading(true)
+
+    try {
+      const response = await fetch('/api/assessment/evaluate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_id: userId,
+          messages: messages
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Assessment failed')
+      }
+
+      const result = await response.json()
+      setAssessmentResult(result)
+      
+      // Add assessment result as a message
+      const assessmentMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        content: `🎯 **Assessment Complete**\n\n**Overall Score:** ${result.overall_score}/5.0\n\n**Feedback:** ${result.feedback}\n\n**Strengths:** ${result.strengths.join(', ')}\n\n**Areas for Improvement:** ${result.improvement_areas.join(', ')}`,
+        role: 'assistant',
+        timestamp: new Date()
+      }
+      
+      setMessages(prev => [...prev, assessmentMessage])
+    } catch (error) {
+      console.error('Assessment failed:', error)
+      alert('Assessment failed. Please try again.')
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    const closeFeedback = () => {
-        setShowFeedback(false)
-        setAnalysisResult(null)
+  const handleWhiteboardSave = async (pngData: string) => {
+    try {
+      const response = await fetch('/api/whiteboard/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          png_data: pngData,
+          session_id: sessionId,
+          user_id: userId
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Upload failed')
+      }
+
+      const result = await response.json()
+      console.log('Whiteboard saved:', result.artifact_id)
+      alert('Whiteboard saved successfully!')
+    } catch (error) {
+      console.error('Upload failed:', error)
+      alert('Upload failed. Please try again.')
     }
+  }
 
-    const handleRequestAssessment = async () => {
-        if (messages.length < 2) return
+  const handleWhiteboardAnalyze = async (pngData: string) => {
+    setIsAnalyzing(true)
 
-        setIsAssessmentLoading(true)
+    try {
+      // First upload the PNG
+      const uploadResponse = await fetch('/api/whiteboard/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          png_data: pngData,
+          session_id: sessionId,
+          user_id: userId
+        }),
+      })
 
-        try {
-            // Prepare assessment request data
-            const conversationHistory = messages
-                .map(msg => `${msg.role}: ${msg.content}`)
-                .join('\n')
-                .slice(-2000) // Limit to last 2000 characters
+      if (!uploadResponse.ok) {
+        throw new Error('Upload failed')
+      }
 
-            const assessmentRequest = {
-                user_id: mockUser.email,
-                interaction_context: `User engaged in system design learning session with ${messages.length} messages exchanged. Recent conversation: ${messages.slice(-3).map(m => m.content).join(' ')}`,
-                conversation_history: conversationHistory,
-                assessment_type: 'chat'
-            }
+      const uploadResult = await uploadResponse.json()
 
-            const response = await fetch('/api/assessment/evaluate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(assessmentRequest),
-            })
+      // Then analyze the uploaded image
+      const analyzeResponse = await fetch('/api/whiteboard/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          artifact_id: uploadResult.artifact_id,
+          session_id: sessionId,
+          user_id: userId
+        }),
+      })
 
-            if (!response.ok) {
-                throw new Error(`Assessment failed: ${response.status}`)
-            }
+      if (!analyzeResponse.ok) {
+        throw new Error('Analysis failed')
+      }
 
-            const assessmentData = await response.json()
-            setAssessmentResult(assessmentData)
-
-            // Switch to assessment tab to show results
-            setWhiteboardVisible(false)
-
-        } catch (error) {
-            console.error('Failed to get assessment:', error)
-            alert(`Assessment failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        } finally {
-            setIsAssessmentLoading(false)
-        }
+      const analysisResult = await analyzeResponse.json()
+      
+      // Add analysis result as a message
+      const analysisMessage: Message = {
+        id: (Date.now() + 3).toString(),
+        content: `🔍 **Whiteboard Analysis**\n\n**Components Identified:** ${analysisResult.components_identified.join(', ')}\n\n**Feedback:** ${analysisResult.architectural_feedback}\n\n**Suggestions:** ${analysisResult.suggestions.join(', ')}\n\n**Confidence Score:** ${(analysisResult.confidence_score * 100).toFixed(1)}%`,
+        role: 'assistant',
+        timestamp: new Date()
+      }
+      
+      setMessages(prev => [...prev, analysisMessage])
+    } catch (error) {
+      console.error('Analysis failed:', error)
+      alert('Analysis failed. Please try again.')
+    } finally {
+      setIsAnalyzing(false)
     }
+  }
 
+  const handleSwipeLeft = () => {
+    if (isMobile) {
+      setMobileActivePanel('whiteboard')
+    }
+  }
 
+  const handleSwipeRight = () => {
+    if (isMobile) {
+      setMobileActivePanel('chat')
+    }
+  }
 
-    return (
-        <div className="flex h-screen bg-gray-50">
-            {/* Chat Panel - Left Side */}
-            <div className={`flex flex-col transition-all duration-300 ease-in-out ${whiteboardVisible ? 'w-[45%]' : 'w-full'
-                }`}>
-                <div className="flex-1 p-6 overflow-hidden">
-                    <div className="h-full flex flex-col">
-                        <div className="flex items-center justify-between mb-6">
-                            <h1 className="text-2xl font-bold text-gray-900">System Design AI Tutor</h1>
-                            <Button
-                                onClick={toggleWhiteboard}
-                                variant="outline"
-                                size="sm"
-                                className="flex items-center gap-2"
-                            >
-                                {whiteboardVisible ? (
-                                    <>
-                                        <ChevronRight className="h-4 w-4" />
-                                        Hide Whiteboard
-                                    </>
-                                ) : (
-                                    <>
-                                        <ChevronLeft className="h-4 w-4" />
-                                        Show Whiteboard
-                                    </>
-                                )}
-                            </Button>
-                        </div>
+  return (
+    <div className={`h-screen flex overflow-hidden ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      {/* Sidebar */}
+      <Sidebar
+        sessions={sessions}
+        currentSessionId={sessionId}
+        onNewSession={handleNewSession}
+        onSelectSession={handleSelectSession}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+      />
 
-                        <div className="flex-1 overflow-hidden">
-                            <ChatInterface
-                                messages={messages}
-                                onSendMessage={handleSendMessage}
-                                onRequestAssessment={handleRequestAssessment}
-                                isLoading={isLoading}
-                            />
-                        </div>
-                    </div>
-                </div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {isMobile ? (
+          /* Mobile: Single panel with swipe navigation */
+          <div className="flex-1 relative">
+            {/* Mobile Panel Indicators */}
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex space-x-2">
+              <button
+                onClick={() => setMobileActivePanel('chat')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  mobileActivePanel === 'chat'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                Chat
+              </button>
+              <button
+                onClick={() => setMobileActivePanel('whiteboard')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  mobileActivePanel === 'whiteboard'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                Design
+              </button>
             </div>
 
-            {/* Whiteboard Panel - Right Side */}
-            {whiteboardVisible && (
-                <div className="w-[55%] border-l border-gray-200 bg-white">
-                    <div className="h-full flex flex-col">
-                        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                            <div className="flex items-center gap-2">
-                                <Palette className="h-5 w-5 text-blue-600" />
-                                <h2 className="text-lg font-semibold text-gray-900">System Design Whiteboard</h2>
-                            </div>
-                        </div>
+            {/* Mobile Chat Panel */}
+            <div
+              className={`absolute inset-0 transition-transform duration-300 ${
+                mobileActivePanel === 'chat' ? 'translate-x-0' : '-translate-x-full'
+              }`}
+              onTouchStart={(e) => {
+                const touchStart = e.touches[0].clientX
+                const handleTouchEnd = (endEvent: TouchEvent) => {
+                  const touchEnd = endEvent.changedTouches[0].clientX
+                  const diff = touchStart - touchEnd
+                  if (diff > 50) handleSwipeLeft() // Swipe left to whiteboard
+                  document.removeEventListener('touchend', handleTouchEnd)
+                }
+                document.addEventListener('touchend', handleTouchEnd)
+              }}
+            >
+              <div className="h-full pt-16">
+                <ChatInterface
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  onRequestAssessment={handleRequestAssessment}
+                  isLoading={isLoading}
+                  showAssessmentButton={true}
+                />
+              </div>
+            </div>
 
-                        <div className="flex-1 overflow-hidden p-4">
-                            <WhiteboardCanvas
-                                onSave={handleWhiteboardSave}
-                                onAnalyze={handleWhiteboardAnalysis}
-                                isAnalyzing={isAnalyzing}
-                            />
+            {/* Mobile Whiteboard Panel */}
+            <div
+              className={`absolute inset-0 transition-transform duration-300 ${
+                mobileActivePanel === 'whiteboard' ? 'translate-x-0' : 'translate-x-full'
+              }`}
+              onTouchStart={(e) => {
+                const touchStart = e.touches[0].clientX
+                const handleTouchEnd = (endEvent: TouchEvent) => {
+                  const touchEnd = endEvent.changedTouches[0].clientX
+                  const diff = touchEnd - touchStart
+                  if (diff > 50) handleSwipeRight() // Swipe right to chat
+                  document.removeEventListener('touchend', handleTouchEnd)
+                }
+                document.addEventListener('touchend', handleTouchEnd)
+              }}
+            >
+              <div className="h-full pt-16">
+                <WhiteboardCanvas
+                  onSave={handleWhiteboardSave}
+                  onAnalyze={handleWhiteboardAnalyze}
+                  isAnalyzing={isAnalyzing}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Desktop: Video Interview Layout - Whiteboard dominant (75%), Interviewer Panel (25%) */
+          <>
+            {/* Primary Whiteboard Area (75%) */}
+            <div className={`flex flex-col transition-all duration-300 ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`} 
+                 style={{ flexBasis: '75%' }}>
+              <div className="h-full p-4">
+                <div className={`h-full rounded-2xl shadow-2xl overflow-hidden ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 ring-1 ring-gray-700' 
+                    : 'bg-white ring-1 ring-gray-200'
+                }`}>
+                  <WhiteboardCanvas
+                    onSave={handleWhiteboardSave}
+                    onAnalyze={handleWhiteboardAnalyze}
+                    isAnalyzing={isAnalyzing}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Interviewer Panel (25%) */}
+            <div className={`flex flex-col transition-all duration-300 ${
+              theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'
+            }`} style={{ flexBasis: '25%', minWidth: '400px' }}>
+              <div className="h-full p-4">
+                {/* Video Call Style Panel */}
+                <div className={`h-full flex flex-col rounded-2xl shadow-2xl overflow-hidden ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 ring-1 ring-gray-700' 
+                    : 'bg-white ring-1 ring-gray-200'
+                }`}>
+                  {/* Interviewer Header - Video Call Style */}
+                  <div className={`p-4 border-b backdrop-blur-sm ${
+                    theme === 'dark' 
+                      ? 'border-gray-700 bg-gradient-to-r from-gray-800 to-gray-750' 
+                      : 'border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50'
+                  }`}>
+                    <div className="flex items-center space-x-3">
+                      {/* AI Interviewer Avatar */}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        theme === 'dark' 
+                          ? 'bg-gradient-to-br from-blue-500 to-purple-600 ring-2 ring-blue-400/30' 
+                          : 'bg-gradient-to-br from-blue-500 to-purple-600 ring-2 ring-blue-400/50'
+                      }`}>
+                        <span className="text-white font-bold text-sm">AI</span>
+                      </div>
+                      <div>
+                        <h3 className={`font-semibold text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                          System Design Interviewer
+                        </h3>
+                        <div className="flex items-center space-x-1">
+                          <div className={`w-2 h-2 rounded-full ${
+                            isLoading ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'
+                          }`}></div>
+                          <span className={`text-xs ${
+                            theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                          }`}>
+                            {isLoading ? 'Thinking...' : 'Online'}
+                          </span>
                         </div>
+                      </div>
                     </div>
+                  </div>
+                  
+                  {/* Chat Interface */}
+                  <div className="flex-1 min-h-0">
+                    <ChatInterface
+                      messages={messages}
+                      onSendMessage={handleSendMessage}
+                      onRequestAssessment={handleRequestAssessment}
+                      isLoading={isLoading}
+                      showAssessmentButton={true}
+                    />
+                  </div>
                 </div>
-            )}
-
-
-
-            {/* Assessment Panel */}
-            {!whiteboardVisible && assessmentResult && (
-                <div className="flex-1 bg-white border-l border-gray-200">
-                    <div className="h-full flex flex-col">
-                        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-purple-50">
-                            <div className="flex items-center gap-2">
-                                <Target className="h-5 w-5 text-purple-600" />
-                                <h2 className="text-lg font-semibold text-gray-900">Learning Assessment</h2>
-                            </div>
-                            <Button
-                                onClick={() => setWhiteboardVisible(true)}
-                                variant="outline"
-                                size="sm"
-                                className="flex items-center gap-2"
-                            >
-                                <ChevronLeft className="h-4 w-4" />
-                                Back to Whiteboard
-                            </Button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-4">
-                            <AssessmentPanel assessment={assessmentResult} />
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Feedback Panel - Overlay */}
-            {showFeedback && analysisResult && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <Card className="w-[90%] max-w-4xl max-h-[90vh] overflow-hidden">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                            <div className="flex items-center gap-2">
-                                <Target className="h-5 w-5 text-green-600" />
-                                <CardTitle>Design Analysis Results</CardTitle>
-                            </div>
-                            <Button
-                                onClick={closeFeedback}
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                            >
-                                <X className="h-4 w-4" />
-                            </Button>
-                        </CardHeader>
-
-                        <CardContent className="space-y-6 overflow-y-auto max-h-[70vh]">
-                            {/* Components Identified */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="space-y-3">
-                                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                                        <MessageSquare className="h-4 w-4 text-blue-600" />
-                                        Components Identified
-                                    </h3>
-                                    <div className="bg-blue-50 rounded-lg p-3">
-                                        <ul className="space-y-1 text-sm text-blue-800">
-                                            {analysisResult.components_identified.map((component, index) => (
-                                                <li key={index} className="flex items-center gap-2">
-                                                    <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                                                    {component}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                                        <Target className="h-4 w-4 text-green-600" />
-                                        Architectural Feedback
-                                    </h3>
-                                    <div className="bg-green-50 rounded-lg p-3">
-                                        <p className="text-sm text-green-800">
-                                            {analysisResult.architectural_feedback}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                                        <Palette className="h-4 w-4 text-purple-600" />
-                                        Suggestions
-                                    </h3>
-                                    <div className="bg-purple-50 rounded-lg p-3">
-                                        <ul className="space-y-1 text-sm text-purple-800">
-                                            {analysisResult.suggestions.map((suggestion, index) => (
-                                                <li key={index} className="flex items-center gap-2">
-                                                    <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
-                                                    {suggestion}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Analysis Metrics */}
-                            <div className="border-t border-gray-200 pt-4">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold text-blue-600">
-                                            {Math.round(analysisResult.confidence_score * 100)}%
-                                        </div>
-                                        <div className="text-sm text-gray-600">Confidence Score</div>
-                                    </div>
-
-                                    {analysisResult.cost_estimate && (
-                                        <div className="text-center">
-                                            <div className="text-2xl font-bold text-green-600">
-                                                ${analysisResult.cost_estimate.toFixed(4)}
-                                            </div>
-                                            <div className="text-sm text-gray-600">Estimated Cost</div>
-                                        </div>
-                                    )}
-
-                                    {analysisResult.tokens_used && (
-                                        <div className="text-center">
-                                            <div className="text-2xl font-bold text-purple-600">
-                                                {analysisResult.tokens_used.toLocaleString()}
-                                            </div>
-                                            <div className="text-sm text-gray-600">Tokens Used</div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Raw Analysis (Collapsible) */}
-                            {analysisResult.raw_analysis && (
-                                <div className="border-t border-gray-200 pt-4">
-                                    <details className="group">
-                                        <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
-                                            View Raw Analysis
-                                        </summary>
-                                        <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-                                            <pre className="text-xs text-gray-600 whitespace-pre-wrap">
-                                                {analysisResult.raw_analysis}
-                                            </pre>
-                                        </div>
-                                    </details>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
-        </div>
-    )
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }

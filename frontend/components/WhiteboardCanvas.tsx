@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useRef, useState, useCallback, useEffect } from 'react'
+import { useTheme } from '@/contexts/ThemeContext'
 import { Button } from './ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Badge } from './ui/badge'
@@ -138,6 +139,7 @@ const BLOCK_TYPES = {
 }
 
 export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardCanvasProps) {
+    const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [selectedTool, setSelectedTool] = useState<'select' | 'connect'>('select')
     const [blocks, setBlocks] = useState<SystemBlock[]>([])
@@ -204,8 +206,10 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
-        // Clear canvas
+        // Clear canvas and fill with theme-appropriate background
         ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.fillStyle = theme === 'dark' ? '#374151' : '#ffffff'  // gray-700 for dark, white for light
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
 
         // Draw connections first (behind blocks)
         connections.forEach(connection => {
@@ -247,7 +251,7 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                 // Draw connection label
                 const midX = (fromX + toX) / 2
                 const midY = (fromY + toY) / 2
-                ctx.fillStyle = '#374151'
+                ctx.fillStyle = theme === 'dark' ? '#D1D5DB' : '#374151'  // gray-300 for dark, gray-700 for light
                 ctx.font = selectedConnectionId === connection.id ? 'bold 12px Arial' : '12px Arial'
                 ctx.textAlign = 'center'
                 ctx.fillText((connection.label || '').toString(), midX, midY - 5)
@@ -597,110 +601,106 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
     }
 
     return (
-        <div className="h-full flex flex-col bg-white rounded-lg border border-gray-200">
-            {/* Main Action Buttons - Top Priority */}
-            <div className="p-4 border-b border-gray-200 bg-blue-50 flex justify-center items-center gap-4">
+        <div className="h-full flex flex-col">
+            {/* Main Action Buttons - Compact */}
+            <div className={`p-3 border-b flex justify-center items-center gap-3 ${
+                theme === 'dark' 
+                    ? 'border-gray-700/50 bg-gray-800/50' 
+                    : 'border-gray-200/50 bg-gray-50/50'
+            }`}>
                 <Button
                     variant="default"
-                    size="default"
+                    size="sm"
                     onClick={saveCanvas}
                     disabled={blocks.length === 0}
-                    className="h-12 px-6 bg-green-600 hover:bg-green-700 text-white font-semibold"
+                    className="h-8 px-4 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-all duration-200"
                 >
-                    <Download className="h-5 w-5 mr-2" />
+                    <Download className="h-3 w-3 mr-1.5" />
                     Save PNG
                 </Button>
                 <Button
                     variant="default"
-                    size="default"
+                    size="sm"
                     onClick={handleAnalyzeWhiteboard}
                     disabled={isAnalyzing || blocks.length === 0}
-                    className="h-12 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                    className="h-8 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-all duration-200"
                 >
                     {isAnalyzing ? (
                         <>
-                            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                            <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
                             Analyzing...
                         </>
                     ) : (
                         <>
-                            <Target className="h-5 w-5 mr-2" />
-                            Analyze Design
+                            <Target className="h-3 w-3 mr-1.5" />
+                            Analyze
                         </>
                     )}
                 </Button>
-
-
             </div>
 
-            {/* Secondary Toolbar */}
-            <div className="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                <div className="flex items-center gap-2">
+            {/* Compact Toolbar */}
+            <div className={`p-2 border-b flex justify-center items-center ${
+                theme === 'dark' 
+                    ? 'border-gray-700/50 bg-gray-800/50' 
+                    : 'border-gray-200/50 bg-gray-50/50'
+            }`}>
+                <div className="flex items-center gap-1">
                     <Button
                         variant={selectedTool === 'select' ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => setSelectedTool('select')}
-                        className="h-8 px-3"
+                        className="h-7 px-2 text-xs"
                     >
-                        <MousePointer className="h-4 w-4 mr-1" />
+                        <MousePointer className="h-3 w-3 mr-1" />
                         Select
                     </Button>
                     <Button
                         variant={selectedTool === 'connect' ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => setSelectedTool('connect')}
-                        className="h-8 px-3"
+                        className="h-7 px-2 text-xs"
                     >
-                        <Link className="h-4 w-4 mr-1" />
+                        <Link className="h-3 w-3 mr-1" />
                         Connect
                     </Button>
-                </div>
-
-                <div className="flex items-center gap-2">
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={handleUndo}
                         disabled={history.length === 0}
-                        className="h-8 px-3"
+                        className="h-7 px-2 text-xs"
                     >
-                        <Undo className="h-4 w-4 mr-1" />
-                        Undo
+                        <Undo className="h-3 w-3" />
                     </Button>
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={handleRedo}
                         disabled={redoStack.length === 0}
-                        className="h-8 px-3"
+                        className="h-7 px-2 text-xs"
                     >
-                        <Redo className="h-4 w-4 mr-1" />
-                        Redo
+                        <Redo className="h-3 w-3" />
                     </Button>
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={clearCanvas}
-                        className="h-8 px-3"
+                        className="h-7 px-2 text-xs text-red-600 border-red-300 hover:bg-red-50"
+                        disabled={blocks.length === 0 && connections.length === 0}
                     >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Clear
+                        <Trash2 className="h-3 w-3" />
                     </Button>
-                </div>
-
-                <div className="flex items-center gap-4">
-                    <div className="text-sm text-gray-600 font-medium">
-                        {blocks.length} blocks, {connections.length} connections
-                    </div>
-                    <div className="text-sm text-blue-600 font-medium">
-                        Tool: {selectedTool === 'select' ? 'Select' : 'Connect'}
-                    </div>
                 </div>
             </div>
 
-            {/* Block Type Buttons */}
-            <div className="p-3 border-b border-gray-200 bg-gray-50">
-                <div className="flex flex-wrap gap-2">
+            {/* Compact Component Buttons */}
+            <div className={`p-2 border-b ${
+                theme === 'dark' 
+                    ? 'border-gray-700/50 bg-gray-800/50' 
+                    : 'border-gray-200/50 bg-gray-50/50'
+            }`}>
+                <div className="flex flex-wrap gap-1">
                     {Object.entries(BLOCK_TYPES).map(([type, config]) => {
                         const IconComponent = config.icon
                         return (
@@ -709,9 +709,9 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleBlockTypeClick(type as SystemBlock['type'])}
-                                className="h-8 px-3 text-xs"
+                                className="h-6 px-2 text-xs"
                             >
-                                <IconComponent className="h-4 w-4 mr-1" />
+                                <IconComponent className="h-3 w-3 mr-1" />
                                 {config.label}
                             </Button>
                         )
@@ -720,10 +720,12 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
             </div>
 
             {/* Canvas Container */}
-            <div className="flex-1 relative overflow-hidden">
+            <div className={`flex-1 relative overflow-hidden ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
                 <canvas
                     ref={canvasRef}
-                    className="w-full h-full border border-gray-300 cursor-crosshair"
+                    className={`w-full h-full border cursor-crosshair ${
+                        theme === 'dark' ? 'border-gray-600' : 'border-gray-300'
+                    }`}
                     onClick={handleCanvasClick}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
@@ -777,17 +779,6 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                 )}
             </div>
 
-            {/* Status Bar */}
-            <div className="p-2 border-t border-gray-200 bg-gray-50 text-xs text-gray-600">
-                <div className="flex items-center justify-between">
-                    <span>
-                        {blocks.length} blocks, {connections.length} connections
-                    </span>
-                    <span>
-                        Tool: {selectedTool === 'select' ? 'Select' : 'Connect'}
-                    </span>
-                </div>
-            </div>
         </div>
     )
 }

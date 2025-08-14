@@ -21,7 +21,7 @@ export function AssessmentButton({
         <Button
             onClick={onRequestAssessment}
             disabled={disabled || isLoading}
-            className={`bg-purple-600 hover:bg-purple-700 text-white font-semibold ${className}`}
+            className={`bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 px-6 py-3 ${className}`}
             data-testid="assessment-button"
         >
             {isLoading ? (

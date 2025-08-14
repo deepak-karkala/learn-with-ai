@@ -16,3 +16,6 @@ global.IntersectionObserver = jest.fn().mockImplementation(() => ({
     unobserve: jest.fn(),
     disconnect: jest.fn(),
 }))
+
+// Mock window.alert
+global.alert = jest.fn()

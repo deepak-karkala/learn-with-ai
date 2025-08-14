@@ -162,7 +162,7 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
             }
             
             // Convert PCM data to Base64 and send as JSON message (as per Gemini Live API requirements)
-            const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)))
+            const base64Data = btoa(String.fromCharCode(...Array.from(new Uint8Array(pcmData.buffer))))
             const message = {
               mime_type: "audio/pcm;rate=16000", // Specify sample rate as required by Gemini Live API
               data: base64Data
@@ -256,7 +256,7 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
   }
 
   useEffect(() => {
-    let raf: number
+    let raf: number | undefined
     const updateLevel = () => {
       if (analyserRef.current) {
         const array = new Uint8Array(analyserRef.current.fftSize)
@@ -273,10 +273,16 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
     if (status === 'recording') {
       raf = requestAnimationFrame(updateLevel)
     } else {
-      cancelAnimationFrame(raf)
+      if (raf !== undefined) {
+        cancelAnimationFrame(raf)
+      }
       setLevel(0)
     }
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      if (raf !== undefined) {
+        cancelAnimationFrame(raf)
+      }
+    }
   }, [status])
 
   return (

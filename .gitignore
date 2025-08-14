@@ -222,3 +222,5 @@ test_setup.py
 # Local development overrides
 .env.local.backup
 .vercel
+
+*.png

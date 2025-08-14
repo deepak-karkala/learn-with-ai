@@ -57,7 +57,67 @@ export function ChatInterface({
     const { theme } = useTheme()
     const [inputValue, setInputValue] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [selectedChapter, setSelectedChapter] = useState<string | null>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+
+    // Get selected chapter from localStorage on mount
+    useEffect(() => {
+        const chapter = localStorage.getItem('selectedChapter')
+        setSelectedChapter(chapter)
+    }, [])
+
+    // Get chapter-specific content
+    const getChapterContent = () => {
+        const chapterData: { [key: string]: { title: string; suggestions: string[] } } = {
+            'twitter': {
+                title: 'Design Twitter/X',
+                suggestions: [
+                    '• "Let\'s start with the core features of Twitter"',
+                    '• "What are the main components we need?"',
+                    '• "How do we handle millions of tweets per day?"'
+                ]
+            },
+            'url-shortener': {
+                title: 'URL Shortener (bit.ly)',
+                suggestions: [
+                    '• "How do we generate short URLs?"',
+                    '• "What database design do we need?"',
+                    '• "How do we handle analytics and tracking?"'
+                ]
+            },
+            'chat-system': {
+                title: 'Chat System (WhatsApp)',
+                suggestions: [
+                    '• "How do we ensure real-time message delivery?"',
+                    '• "What about group chats and media sharing?"',
+                    '• "How do we handle message encryption?"'
+                ]
+            },
+            'newsfeed': {
+                title: 'News Feed System',
+                suggestions: [
+                    '• "How do we generate personalized feeds?"',
+                    '• "What about ranking and recommendation algorithms?"',
+                    '• "How do we handle feed updates at scale?"'
+                ]
+            }
+        }
+
+        if (selectedChapter && chapterData[selectedChapter]) {
+            return chapterData[selectedChapter]
+        }
+
+        return {
+            title: 'System Design Interview',
+            suggestions: [
+                '• "Design a URL shortener like bit.ly"',
+                '• "How would you scale a chat application?"',
+                '• "Design a recommendation system"'
+            ]
+        }
+    }
+
+    const chapterContent = getChapterContent()
     const scrollAreaRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
 
@@ -195,8 +255,11 @@ export function ChatInterface({
                             <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                                 Welcome to your interview!
                             </h3>
+                            <p className={`text-sm mb-2 leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
+                                I'm your AI interviewer. {selectedChapter ? `Today we'll be working on: ${chapterContent.title}` : 'Let\'s start by discussing a system design problem.'}
+                            </p>
                             <p className={`text-sm mb-4 leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-                                I'm your AI interviewer. Let's start by discussing a system design problem. Feel free to use the whiteboard to sketch your ideas!
+                                Feel free to use the whiteboard to sketch your ideas as we discuss!
                             </p>
                             <div className={`rounded-xl p-3 border ${
                                 theme === 'dark' 
@@ -205,9 +268,9 @@ export function ChatInterface({
                             }`}>
                                 <p className={`text-xs font-medium mb-2 ${theme === 'dark' ? 'text-gray-200' : 'text-blue-800'}`}>💡 Let's begin with:</p>
                                 <div className={`space-y-1 text-xs ${theme === 'dark' ? 'text-gray-300' : 'text-blue-700'}`}>
-                                    <p>• "Design a URL shortener like bit.ly"</p>
-                                    <p>• "How would you scale a chat application?"</p>
-                                    <p>• "Design a recommendation system"</p>
+                                    {chapterContent.suggestions.map((suggestion, index) => (
+                                        <p key={index}>{suggestion}</p>
+                                    ))}
                                 </div>
                             </div>
                         </div>

@@ -56,7 +56,19 @@ export default function ChatPage() {
     const existingSessionId = localStorage.getItem(`sessionId:${userId}`)
     if (existingSessionId) {
       setSessionId(existingSessionId)
-      // TODO: Load session messages from API
+      // Load session messages from localStorage
+      const savedMessages = localStorage.getItem(`messages:${existingSessionId}`)
+      if (savedMessages) {
+        try {
+          const parsedMessages = JSON.parse(savedMessages).map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+          setMessages(parsedMessages)
+        } catch (error) {
+          console.error('Failed to parse saved messages:', error)
+        }
+      }
     } else {
       // Generate new session ID
       const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -69,6 +81,13 @@ export default function ChatPage() {
 
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    if (sessionId && messages.length > 0) {
+      localStorage.setItem(`messages:${sessionId}`, JSON.stringify(messages))
+    }
+  }, [messages, sessionId])
 
   const loadSessions = async () => {
     // Mock sessions for development
@@ -107,16 +126,38 @@ export default function ChatPage() {
     setMessages([])
     setAssessmentResult(null)
     localStorage.setItem(`sessionId:${userId}`, newSessionId)
+    localStorage.removeItem(`messages:${sessionId}`) // Clear old session messages
     loadSessions()
   }
 
   const handleSelectSession = (selectedSessionId: string) => {
     if (selectedSessionId === sessionId) return
     
+    // Save current session messages before switching
+    if (messages.length > 0) {
+      localStorage.setItem(`messages:${sessionId}`, JSON.stringify(messages))
+    }
+    
     setSessionId(selectedSessionId)
-    setMessages([]) // In real app, load messages for this session
     setAssessmentResult(null)
     localStorage.setItem(`sessionId:${userId}`, selectedSessionId)
+    
+    // Load messages for the selected session
+    const savedMessages = localStorage.getItem(`messages:${selectedSessionId}`)
+    if (savedMessages) {
+      try {
+        const parsedMessages = JSON.parse(savedMessages).map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }))
+        setMessages(parsedMessages)
+      } catch (error) {
+        console.error('Failed to parse saved messages:', error)
+        setMessages([])
+      }
+    } else {
+      setMessages([])
+    }
   }
 
   const handleSendMessage = async (message: string) => {

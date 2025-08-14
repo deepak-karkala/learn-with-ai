@@ -39,7 +39,7 @@ test('session persists for returning user', async ({ page, context }) => {
     await page2.getByTestId('message-input').fill('Returning visit message')
     await page2.getByTestId('send-button').click()
     const secondResp = await page2.waitForResponse(r => r.url().endsWith('/api/chat') && r.request().method() === 'POST', { timeout: 30000 })
-    await expect(page2.getByTestId('ai-response')).toBeVisible({ timeout: 20_000 })
+    await expect(page2.getByTestId('ai-response')).toHaveCount(2, { timeout: 20_000 }) // Should now have 2 responses
     const secondJson = await secondResp.json()
     const sessionFromResponse2: string | undefined = secondJson?.session_id
 

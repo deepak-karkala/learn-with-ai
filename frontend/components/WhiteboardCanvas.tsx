@@ -624,6 +624,7 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                     onClick={handleAnalyzeWhiteboard}
                     disabled={isAnalyzing || blocks.length === 0}
                     className="h-8 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-all duration-200"
+                    data-testid="analyze-button"
                 >
                     {isAnalyzing ? (
                         <>
@@ -731,6 +732,7 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseUp}
+                    data-testid="whiteboard-canvas"
                 />
 
                 {/* Connection Preview */}

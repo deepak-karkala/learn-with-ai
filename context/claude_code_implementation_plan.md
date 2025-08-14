@@ -968,75 +968,7 @@ test('voice recording starts and stops', async () => {
 
 ### 4.2 Complete Feature Integration
 
-#### **Issue #18: End-to-End Learning Session Flow**
-**Epic**: Integration Testing  
-**Labels**: `integration`, `e2e`, `learning-flow`, `p1-high`  
-**Milestone**: Phase 3 - Integration  
-
-**Description:**
-Complete integration test for entire learning session workflow.
-
-**Acceptance Criteria:**
-- [ ] Complete user onboarding flow
-- [ ] Chapter selection and content loading
-- [ ] Interactive conversation with AI agent
-- [ ] Whiteboard drawing and analysis
-- [ ] AI diagram generation
-- [ ] Assessment and feedback
-- [ ] Progress tracking and dashboard
-- [ ] Session persistence and resumption
-
-**Testing:**
-```javascript
-test('complete learning session', async ({ page }) => {
-  // Start session
-  await page.goto('/')
-  await page.click('[data-testid=start-learning]')
-  
-  // Select chapter
-  await page.click('[data-testid=chapter-twitter]')
-  
-  // Interact with AI
-  await page.fill('[data-testid=message-input]', 'I want to learn Twitter design')
-  await page.click('[data-testid=send-button]')
-  await expect(page.locator('[data-testid=ai-response]')).toBeVisible()
-  
-  // Use whiteboard
-  await page.click('[data-testid=whiteboard-tab]')
-  // Draw on canvas (simulate mouse events)
-  await page.mouse.move(100, 100)
-  await page.mouse.down()
-  await page.mouse.move(200, 200)
-  await page.mouse.up()
-  
-  // Analyze whiteboard
-  await page.click('[data-testid=analyze-button]')
-  await expect(page.locator('[data-testid=feedback-panel]')).toBeVisible()
-  
-  // Generate diagram
-  await page.click('[data-testid=generate-diagram]')
-  await expect(page.locator('[data-testid=diagram-display]')).toBeVisible()
-  
-  // Complete assessment
-  await page.click('[data-testid=assessment-tab]')
-  await page.click('[data-testid=start-assessment]')
-  await expect(page.locator('[data-testid=assessment-results]')).toBeVisible()
-  
-  // Check progress dashboard
-  await page.click('[data-testid=progress-tab]')
-  await expect(page.locator('[data-testid=progress-timeline]')).toBeVisible()
-})
-```
-
-**Definition of Done:**
-- Complete user flow works without errors
-- All features integrate seamlessly
-- Performance is acceptable
-- Data persists correctly
-
----
-
-#### **Issue #19: Progress Dashboard Frontend Implementation**
+#### **Issue #18: Progress Dashboard Frontend Implementation**
 **Epic**: Progress Tracking  
 **Labels**: `frontend`, `progress`, `dashboard`, `p1-high`  
 **Milestone**: Phase 3 - Integration  
@@ -1105,6 +1037,76 @@ test('timeline chart is interactive', () => {
 - UI is polished and user-friendly
 
 ---
+
+
+#### **Issue #19: End-to-End Learning Session Flow**
+**Epic**: Integration Testing  
+**Labels**: `integration`, `e2e`, `learning-flow`, `p1-high`  
+**Milestone**: Phase 3 - Integration  
+
+**Description:**
+Complete integration test for entire learning session workflow.
+
+**Acceptance Criteria:**
+- [ ] Complete user onboarding flow
+- [ ] Chapter selection and content loading
+- [ ] Interactive conversation with AI agent
+- [ ] Whiteboard drawing and analysis
+- [ ] AI diagram generation
+- [ ] Assessment and feedback
+- [ ] Progress tracking and dashboard
+- [ ] Session persistence and resumption
+
+**Testing:**
+```javascript
+test('complete learning session', async ({ page }) => {
+  // Start session
+  await page.goto('/')
+  await page.click('[data-testid=start-learning]')
+  
+  // Select chapter
+  await page.click('[data-testid=chapter-twitter]')
+  
+  // Interact with AI
+  await page.fill('[data-testid=message-input]', 'I want to learn Twitter design')
+  await page.click('[data-testid=send-button]')
+  await expect(page.locator('[data-testid=ai-response]')).toBeVisible()
+  
+  // Use whiteboard
+  await page.click('[data-testid=whiteboard-tab]')
+  // Draw on canvas (simulate mouse events)
+  await page.mouse.move(100, 100)
+  await page.mouse.down()
+  await page.mouse.move(200, 200)
+  await page.mouse.up()
+  
+  // Analyze whiteboard
+  await page.click('[data-testid=analyze-button]')
+  await expect(page.locator('[data-testid=feedback-panel]')).toBeVisible()
+  
+  // Generate diagram
+  await page.click('[data-testid=generate-diagram]')
+  await expect(page.locator('[data-testid=diagram-display]')).toBeVisible()
+  
+  // Complete assessment
+  await page.click('[data-testid=assessment-tab]')
+  await page.click('[data-testid=start-assessment]')
+  await expect(page.locator('[data-testid=assessment-results]')).toBeVisible()
+  
+  // Check progress dashboard
+  await page.click('[data-testid=progress-tab]')
+  await expect(page.locator('[data-testid=progress-timeline]')).toBeVisible()
+})
+```
+
+**Definition of Done:**
+- Complete user flow works without errors
+- All features integrate seamlessly
+- Performance is acceptable
+- Data persists correctly
+
+---
+
 
 ## 5. Phase 4: Production Readiness (Weeks 13-16)
 

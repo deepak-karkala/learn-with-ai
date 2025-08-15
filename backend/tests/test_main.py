@@ -55,12 +55,12 @@ def test_chat_endpoint_validation():
     })
     assert response.status_code == 422
     
-    # Test message with harmful content
+    # Test message with harmful content (blocked by security middleware)
     response = client.post("/api/chat", json={
         "message": "Hello <script>alert('xss')</script>",
         "user_id": "test_user"
     })
-    assert response.status_code == 422
+    assert response.status_code == 400
     
     # Test valid message
     response = client.post("/api/chat", json={

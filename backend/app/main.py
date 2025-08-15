@@ -41,6 +41,18 @@ from app.api.diagrams import router as diagrams_router
 from app.api.voice import router as voice_router
 from app.services.config import settings, setup_logging
 
+# Production services
+from app.services.redis_service import init_redis, get_redis_service
+from app.services.storage_service import init_storage, get_storage_service
+from app.services.memory_service import init_memory_service, get_memory_service
+from app.services.monitoring_service import init_monitoring, get_monitoring_service
+from app.services.alerting_service import init_alerting, get_alerting_service
+from app.services.analytics_service import init_analytics, get_analytics_service
+from app.services.logging_service import init_logging, get_log_service
+from app.database.connection import init_database
+from app.database.migrations import initialize_database
+from app.middleware import configure_cors, configure_security_middleware
+
 # Load environment variables
 load_dotenv()
 
@@ -150,6 +162,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Startup
     try:
+        logger.info("Starting production services initialization...")
+        
+        # Initialize production services
+        init_redis()
+        init_storage()
+        init_memory_service()
+        init_monitoring()
+        init_alerting()
+        init_analytics()
+        init_logging()
+        
+        # Initialize database
+        if os.getenv("DATABASE_URL"):
+            logger.info("Initializing database...")
+            init_database()
+            initialize_database()
+        else:
+            logger.warning("DATABASE_URL not configured, skipping database initialization")
+        
+        logger.info("Production services initialized successfully")
+        
+        # Initialize core application services
         adk_service = ADKService()
         whiteboard_service = WhiteboardService(adk_service)
         assessment_service = AssessmentService()
@@ -174,8 +208,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.assessment_service = assessment_service
         app.state.progress_service = progress_service
         app.state.diagram_service = diagram_service
+        
+        # Store production services in app state
+        app.state.redis_service = get_redis_service()
+        app.state.storage_service = get_storage_service()
+        app.state.memory_service = get_memory_service()
+        app.state.monitoring_service = get_monitoring_service()
+        app.state.alerting_service = get_alerting_service()
+        app.state.analytics_service = get_analytics_service()
+        app.state.log_service = get_log_service()
 
+        logger.info("All services initialized successfully")
         yield
+        
     except Exception as e:
         # Log startup error but don't crash the app
         logger.error(f"Failed to initialize services: {e}")
@@ -187,10 +232,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
     finally:
         # Shutdown - cleanup resources
+        logger.info("Shutting down services...")
         if diagram_service:
             await diagram_service.cleanup_mcp()
         if adk_service:
             await adk_service.cleanup()
+        logger.info("Services shutdown completed")
 
 
 # Create FastAPI app with proper lifecycle management
@@ -198,25 +245,62 @@ app = FastAPI(
     title=settings.api_title,
     description="Backend API for AI-powered system design learning",
     version=settings.api_version,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
     lifespan=lifespan,
 )
 
+# Configure production middleware
+configure_security_middleware(app)
+configure_cors(app)
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://frontend-lua5my5jr-dkarkala01-gmailcoms-projects.vercel.app",
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept"],
-)
+# Add monitoring and rate limiting middleware
 
-# Add rate limiting middleware
+@app.middleware("http")
+async def monitoring_middleware(request: Request, call_next):
+    """Monitoring middleware to track all API requests"""
+    start_time = time.time()
+    
+    try:
+        response = await call_next(request)
+        
+        # Track API request
+        monitoring_service = get_monitoring_service()
+        if monitoring_service.is_enabled():
+            duration = time.time() - start_time
+            
+            # Extract user_id from request if available
+            user_id = None
+            if hasattr(request.state, 'user_id'):
+                user_id = request.state.user_id
+            
+            monitoring_service.track_api_request(
+                endpoint=request.url.path,
+                method=request.method,
+                status_code=response.status_code,
+                response_time=duration,
+                user_id=user_id,
+                request_size=request.headers.get('content-length'),
+                response_size=response.headers.get('content-length')
+            )
+        
+        return response
+        
+    except Exception as e:
+        # Track error
+        monitoring_service = get_monitoring_service()
+        if monitoring_service.is_enabled():
+            duration = time.time() - start_time
+            monitoring_service.track_error(
+                error=e,
+                context=f"{request.method} {request.url.path}",
+                metadata={
+                    "endpoint": request.url.path,
+                    "method": request.method,
+                    "duration": duration
+                }
+            )
+        raise
 
 
 @app.middleware("http")
@@ -237,6 +321,15 @@ async def rate_limit(request: Request, call_next):
     # Apply rate limiting
     rate_limit_result = await rate_limit_middleware(request)
     if rate_limit_result:
+        # Track rate limit hit
+        monitoring_service = get_monitoring_service()
+        if monitoring_service.is_enabled():
+            monitoring_service.track_rate_limit_hit(
+                user_id=request.client.host,
+                endpoint=request.url.path,
+                limit=MAX_REQUESTS_PER_WINDOW,
+                current_count=len(rate_limit_storage[request.client.host])
+            )
         return rate_limit_result
     
     response = await call_next(request)
@@ -307,7 +400,35 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
             )
 
         # Get response from ADK service
+        chat_start_time = time.time()
         response = await adk_service.chat(validated_request)
+        chat_duration = time.time() - chat_start_time
+
+        # Track chat interaction with monitoring and analytics
+        monitoring_service = get_monitoring_service()
+        analytics_service = get_analytics_service()
+        session_id = response.session_id or validated_request.session_id or "unknown"
+        
+        if monitoring_service.is_enabled() and response.success:
+            monitoring_service.track_chat_interaction(
+                user_id=validated_request.user_id,
+                session_id=session_id,
+                user_message=validated_request.message,
+                ai_response=response.response,
+                model_name="gemini-2.0-flash",  # Default model
+                response_time=chat_duration,
+                token_usage=response.metadata.get("token_usage") if response.metadata else None,
+                cost=response.metadata.get("cost") if response.metadata else None
+            )
+        
+        # Track with analytics service
+        analytics_service.track_chat_interaction(
+            user_id=validated_request.user_id,
+            session_id=session_id,
+            user_message=validated_request.message,
+            ai_response=response.message,
+            response_time=chat_duration
+        )
 
         # Log the response status
         if response.success:
@@ -357,6 +478,15 @@ async def create_session(request: SessionCreateRequest) -> SessionCreateResponse
             )
         
         response = await adk_service.create_session(request)
+        
+        # Start analytics session tracking
+        if response.success:
+            analytics_service = get_analytics_service()
+            analytics_service.start_session(
+                user_id=request.user_id,
+                session_id=response.session_id
+            )
+        
         return response
         
     except Exception as e:
@@ -722,6 +852,14 @@ app.include_router(
     voice_router,
     prefix="/api",
     tags=["voice"]
+)
+
+# Monitoring API endpoints
+from app.api.monitoring import router as monitoring_router
+app.include_router(
+    monitoring_router,
+    prefix="/api",
+    tags=["monitoring"]
 )
 
 

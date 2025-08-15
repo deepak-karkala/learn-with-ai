@@ -3,7 +3,7 @@ Whiteboard-related Pydantic models for PNG upload and analysis.
 """
 
 from typing import Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import base64
 
 
@@ -19,7 +19,8 @@ class PNGUploadRequest(BaseModel):
         None, description="Optional description of the whiteboard content"
     )
     
-    @validator('png_data')
+    @field_validator('png_data')
+    @classmethod
     def validate_png_data(cls, v):
         """Validate PNG data format"""
         if not v:

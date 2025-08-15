@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Dict, Optional, List
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 
 
@@ -33,7 +33,8 @@ class AssessmentRequest(BaseModel):
         default="system_design", description="Type of assessment"
     )
     
-    @validator('interaction_context')
+    @field_validator('interaction_context')
+    @classmethod
     def validate_interaction_context(cls, v):
         if not v.strip():
             raise ValueError("Interaction context cannot be empty")
@@ -83,13 +84,15 @@ class AssessmentResponse(BaseModel):
     recommendations: List[str] = Field(..., description="Actionable recommendations")
     next_steps: List[str] = Field(..., description="Suggested next steps")
     
-    @validator('overall_score')
+    @field_validator('overall_score')
+    @classmethod
     def validate_overall_score(cls, v):
         if not 1.0 <= v <= 5.0:
             raise ValueError("Overall score must be between 1.0 and 5.0")
         return round(v, 2)
     
-    @validator('confidence_score')
+    @field_validator('confidence_score')
+    @classmethod
     def validate_confidence_score(cls, v):
         if not 1.0 <= v <= 5.0:
             raise ValueError("Confidence score must be between 1.0 and 5.0")

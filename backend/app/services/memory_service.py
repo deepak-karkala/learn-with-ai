@@ -49,6 +49,11 @@ class MemoryService:
     def _initialize_service(self) -> None:
         """Initialize Vertex AI RAG service."""
         try:
+            # Skip memory service initialization in development if desired
+            if os.getenv("DISABLE_MEMORY_SERVICE", "false").lower() == "true":
+                logger.info("Memory service disabled via environment variable")
+                return
+                
             if SentenceTransformer is None or aiplatform is None:
                 logger.warning("Required dependencies not available, memory service will be disabled")
                 return

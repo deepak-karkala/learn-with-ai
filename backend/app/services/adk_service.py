@@ -8,7 +8,7 @@ import logging
 import os
 import time
 import warnings
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from weakref import WeakValueDictionary
 
 from google.adk.agents import Agent, LiveRequestQueue
@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from app.services.config import settings
 from app.models.diagram import DiagramType
 from app.services.performance_service import monitor_performance
+from app.services.session_persistence_service import get_session_persistence_service, SessionPersistenceService
 
 
 logger = logging.getLogger(__name__)
@@ -109,10 +110,12 @@ class ADKService:
         self._max_pool_size = settings.adk_max_connections
         self._sessions: WeakValueDictionary = WeakValueDictionary()
 
-        # Session state management
-        self._session_states: Dict[str, Dict[str, Any]] = {}
-        self._session_creation_time: Dict[str, float] = {}
+        # Session state management - now integrated with persistence service
+        self._session_states: Dict[str, Dict[str, Any]] = {}  # In-memory cache
+        self._session_creation_time: Dict[str, float] = {}  # In-memory cache
         self._session_expiry_seconds = settings.adk_session_expiry_seconds
+        self._persistence_service: Optional[SessionPersistenceService] = None
+        self._conversation_history: Dict[str, List[Dict[str, Any]]] = {}  # Track conversation history
 
         # Timeout configuration for streaming responses (configurable)
         self._streaming_timeout = settings.adk_streaming_timeout
@@ -127,6 +130,9 @@ class ADKService:
         self._queue_health: Dict[str, float] = {}  # Track last successful use
 
         self._initialize_adk()
+        
+        # Initialize persistence service asynchronously on first use
+        self._persistence_initialized = False
 
     def _configure_environment(self) -> None:
         """Configure environment variables for ADK (only once)"""
@@ -222,7 +228,7 @@ You have access to the conversation history through the session state. Use this 
             self._initialize_reusable_objects()
 
             # Session service will be initialized per-chat for proper live sessions
-            logger.info("ADK service initialized - sessions will be created per chat")
+            logger.info("ADK service initialized - sessions will be created per chat with persistence support")
 
         except Exception as e:
             logger.error(f"Failed to initialize ADK service: {str(e)}", exc_info=True)
@@ -367,6 +373,70 @@ You have access to the conversation history through the session state. Use this 
                 logger.debug(f"Runner cleanup requested for user {user_id}")
                 pass  # ADK runners should clean themselves up
 
+    async def _ensure_persistence_initialized(self) -> None:
+        """Ensure the persistence service is initialized (lazy loading)"""
+        if not self._persistence_initialized:
+            try:
+                self._persistence_service = await get_session_persistence_service()
+                self._persistence_initialized = True
+                logger.info("Session persistence service initialized for ADK service")
+            except Exception as e:
+                logger.warning(f"Failed to initialize session persistence service: {e}")
+                # Continue without persistence - graceful degradation
+                self._persistence_initialized = True  # Mark as attempted
+    
+    async def _save_session_to_persistence(self, session_id: str, user_id: str, state: Dict[str, Any]) -> None:
+        """Save session state to persistent storage"""
+        if not self._persistence_service:
+            return
+        
+        try:
+            conversation_history = self._conversation_history.get(session_id, [])
+            await self._persistence_service.save_session_state(
+                session_id=session_id,
+                user_id=user_id,
+                state_data=state,
+                conversation_history=conversation_history
+            )
+            logger.debug(f"Saved session {session_id} to persistent storage")
+        except Exception as e:
+            logger.warning(f"Failed to save session {session_id} to persistent storage: {e}")
+    
+    async def _load_session_from_persistence(self, session_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        """Load session state from persistent storage"""
+        if not self._persistence_service:
+            return None
+        
+        try:
+            session_data = await self._persistence_service.load_session_state(session_id, user_id)
+            if session_data:
+                logger.debug(f"Loaded session {session_id} from persistent storage")
+                
+                # Restore conversation history
+                if 'conversation_history' in session_data:
+                    self._conversation_history[session_id] = session_data['conversation_history']
+                
+                return session_data.get('session_state', {})
+        except Exception as e:
+            logger.warning(f"Failed to load session {session_id} from persistent storage: {e}")
+        
+        return None
+    
+    async def _add_to_conversation_history(self, session_id: str, role: str, content: str) -> None:
+        """Add a message to the conversation history"""
+        if session_id not in self._conversation_history:
+            self._conversation_history[session_id] = []
+        
+        self._conversation_history[session_id].append({
+            "role": role,
+            "content": content,
+            "timestamp": time.time()
+        })
+        
+        # Keep conversation history manageable (last 50 messages)
+        if len(self._conversation_history[session_id]) > 50:
+            self._conversation_history[session_id] = self._conversation_history[session_id][-50:]
+    
     async def cleanup(self) -> None:
         """Clean up all resources for graceful shutdown"""
         logger.info("Cleaning up ADK service resources")
@@ -393,6 +463,11 @@ You have access to the conversation history through the session state. Use this 
         # Clean up session state management
         self._session_states.clear()
         self._session_creation_time.clear()
+        self._conversation_history.clear()
+        
+        # Shutdown persistence service if initialized
+        if self._persistence_service:
+            await self._persistence_service.shutdown()
 
         logger.info("ADK service cleanup completed")
 
@@ -407,8 +482,8 @@ You have access to the conversation history through the session state. Use this 
 
         return elapsed_time > self._session_expiry_seconds
 
-    def _cleanup_expired_sessions(self) -> None:
-        """Clean up expired sessions"""
+    async def _cleanup_expired_sessions(self) -> None:
+        """Clean up expired sessions from both memory and persistent storage"""
         expired_sessions = [
             session_id
             for session_id in list(self._session_creation_time.keys())
@@ -419,6 +494,15 @@ You have access to the conversation history through the session state. Use this 
             logger.debug(f"Cleaning up expired session: {session_id}")
             self._session_creation_time.pop(session_id, None)
             self._session_states.pop(session_id, None)
+            self._conversation_history.pop(session_id, None)
+            
+            # Also schedule cleanup from persistent storage
+            if self._persistence_service:
+                try:
+                    user_id = session_id.split('_session_')[0] if '_session_' in session_id else 'unknown'
+                    await self._persistence_service.delete_session(session_id, user_id)
+                except Exception as e:
+                    logger.warning(f"Failed to delete expired session {session_id} from persistent storage: {e}")
 
     async def create_session(
         self, request: SessionCreateRequest
@@ -433,8 +517,11 @@ You have access to the conversation history through the session state. Use this 
             Session creation response with session_id and state
         """
         try:
+            # Ensure persistence service is initialized
+            await self._ensure_persistence_initialized()
+            
             # Clean up expired sessions periodically
-            self._cleanup_expired_sessions()
+            await self._cleanup_expired_sessions()
 
             # Generate session ID with consistent timestamp
             creation_timestamp = time.time()
@@ -464,6 +551,9 @@ You have access to the conversation history through the session state. Use this 
             # Store session state and creation time for management (using same timestamp)
             self._session_states[session_id] = merged_state
             self._session_creation_time[session_id] = creation_timestamp
+            
+            # Save to persistent storage
+            await self._save_session_to_persistence(session_id, request.user_id, merged_state)
 
             logger.info(
                 f"Created session {session_id} for user {request.user_id} with state: {list(merged_state.keys())}"
@@ -489,9 +579,9 @@ You have access to the conversation history through the session state. Use this 
                 error=str(e),
             )
 
-    def get_user_sessions(self, user_id: str) -> Dict[str, Any]:
+    async def get_user_sessions(self, user_id: str) -> Dict[str, Any]:
         """
-        Get all sessions for a user.
+        Get all sessions for a user from both memory and persistent storage.
 
         Args:
             user_id: User identifier
@@ -500,28 +590,58 @@ You have access to the conversation history through the session state. Use this 
             User sessions information
         """
         try:
+            # Ensure persistence service is initialized
+            await self._ensure_persistence_initialized()
+            
             # Clean up expired sessions first
-            self._cleanup_expired_sessions()
+            await self._cleanup_expired_sessions()
 
-            # Find sessions for this user
-            user_sessions = []
+            # Get sessions from memory
+            memory_sessions = []
             for session_id, creation_time in self._session_creation_time.items():
                 if session_id.startswith(f"{user_id}_session_"):
                     session_state = self._session_states.get(session_id, {})
-                    user_sessions.append(
+                    memory_sessions.append(
                         {
                             "session_id": session_id,
                             "created_at": creation_time,
                             "state": session_state,
                             "expired": self._is_session_expired(session_id),
+                            "source": "memory"
                         }
                     )
 
+            # Get sessions from persistent storage
+            persistent_sessions = []
+            if self._persistence_service:
+                try:
+                    stored_sessions = await self._persistence_service.get_user_sessions(user_id, include_expired=False)
+                    for session_metadata in stored_sessions:
+                        # Only include if not already in memory
+                        if not any(ms["session_id"] == session_metadata.session_id for ms in memory_sessions):
+                            persistent_sessions.append({
+                                "session_id": session_metadata.session_id,
+                                "created_at": session_metadata.created_at.timestamp(),
+                                "state": {},  # Load on demand
+                                "expired": False,  # Already filtered out expired
+                                "source": "persistent",
+                                "last_accessed": session_metadata.last_accessed.timestamp(),
+                                "conversation_count": session_metadata.conversation_count
+                            })
+                except Exception as e:
+                    logger.warning(f"Failed to get persistent sessions for user {user_id}: {e}")
+
+            # Combine and sort by creation time
+            all_sessions = memory_sessions + persistent_sessions
+            all_sessions.sort(key=lambda x: x["created_at"], reverse=True)
+
             return {
                 "user_id": user_id,
-                "sessions": user_sessions,
-                "total_sessions": len(user_sessions),
-                "active_sessions": len([s for s in user_sessions if not s["expired"]]),
+                "sessions": all_sessions,
+                "total_sessions": len(all_sessions),
+                "active_sessions": len([s for s in all_sessions if not s["expired"]]),
+                "memory_sessions": len(memory_sessions),
+                "persistent_sessions": len(persistent_sessions)
             }
 
         except Exception as e:
@@ -551,6 +671,34 @@ You have access to the conversation history through the session state. Use this 
         # Sort by creation time and return the most recent
         most_recent = max(user_sessions, key=lambda x: x[1])
         return most_recent[0]
+    
+    async def get_session_conversation_history(self, session_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Get conversation history for a session.
+        
+        Args:
+            session_id: Session identifier
+            user_id: User identifier
+            
+        Returns:
+            List of conversation messages
+        """
+        try:
+            # Check memory first
+            if session_id in self._conversation_history:
+                return self._conversation_history[session_id]
+            
+            # Try to load from persistent storage
+            await self._ensure_persistence_initialized()
+            if self._persistence_service:
+                session_data = await self._load_session_from_persistence(session_id, user_id)
+                if session_data and 'conversation_history' in session_data:
+                    return session_data['conversation_history']
+            
+            return []
+        except Exception as e:
+            logger.error(f"Failed to get conversation history for session {session_id}: {e}")
+            return []
 
     @monitor_performance("adk_chat", "chat_response")
     async def chat(self, request: ChatRequest) -> ChatResponse:
@@ -563,8 +711,11 @@ You have access to the conversation history through the session state. Use this 
         Returns:
             Chat response from the agent
         """
+        # Ensure persistence service is initialized
+        await self._ensure_persistence_initialized()
+        
         # Clean up expired sessions first
-        self._cleanup_expired_sessions()
+        await self._cleanup_expired_sessions()
 
         # Determine session_id: use provided one, or find most recent active, or create new
         if request.session_id:
@@ -600,7 +751,7 @@ You have access to the conversation history through the session state. Use this 
             runner = await self._get_or_create_runner(request.user_id)
             logger.debug("Obtained runner from pool")
 
-            # Get or create session state with user preferences
+                # Get or create session state with user preferences
             if session_id in self._session_states and not self._is_session_expired(
                 session_id
             ):
@@ -608,15 +759,28 @@ You have access to the conversation history through the session state. Use this 
                 session_state = self._session_states[session_id]
                 logger.debug(f"Using existing session state for {session_id}")
             else:
-                # Create new session with default state
-                session_state = {
-                    "skill_level": "intermediate",
-                    "learning_progress": {},
-                    "preferences": {"difficulty": "medium", "focus_areas": []},
-                }
-                self._session_states[session_id] = session_state
-                self._session_creation_time[session_id] = time.time()
-                logger.debug(f"Created new session state for {session_id}")
+                # Try to load from persistent storage first
+                session_data = await self._load_session_from_persistence(session_id, request.user_id)
+                
+                if session_data:
+                    # Restored from persistent storage
+                    session_state = session_data
+                    self._session_states[session_id] = session_state
+                    self._session_creation_time[session_id] = time.time()
+                    logger.info(f"Restored session {session_id} from persistent storage")
+                else:
+                    # Create new session with default state
+                    session_state = {
+                        "skill_level": "intermediate",
+                        "learning_progress": {},
+                        "preferences": {"difficulty": "medium", "focus_areas": []},
+                    }
+                    self._session_states[session_id] = session_state
+                    self._session_creation_time[session_id] = time.time()
+                    logger.debug(f"Created new session state for {session_id}")
+                    
+                    # Save new session to persistent storage
+                    await self._save_session_to_persistence(session_id, request.user_id, session_state)
 
             # Create session using the runner's session service
             session = await runner.session_service.create_session(
@@ -641,6 +805,9 @@ You have access to the conversation history through the session state. Use this 
             )
             logger.debug("Started live agent session")
 
+            # Add user message to conversation history
+            await self._add_to_conversation_history(session_id, "user", request.message)
+            
             # Send user message to the agent using efficient content creation
             user_content = self._create_user_content(request.message)
             live_request_queue.send_content(content=user_content)
@@ -716,6 +883,13 @@ You have access to the conversation history through the session state. Use this 
                     f"Generated ADK response for session {session_id}: "
                     f"{len(response_text)} characters"
                 )
+                
+                # Add agent response to conversation history
+                await self._add_to_conversation_history(session_id, "assistant", response_text.strip())
+                
+                # Save updated session state to persistent storage
+                if session_id in self._session_states:
+                    await self._save_session_to_persistence(session_id, request.user_id, self._session_states[session_id])
 
                 # Check if the response suggests generating a diagram
                 enhanced_response = await self._enhance_response_with_diagrams(
@@ -772,7 +946,7 @@ You have access to the conversation history through the session state. Use this 
         """
         try:
             # Check if user has any active sessions
-            user_sessions = self.get_user_sessions(user_id)
+            user_sessions = await self.get_user_sessions(user_id)
             active_sessions = [s for s in user_sessions["sessions"] if not s["expired"]]
 
             if active_sessions:

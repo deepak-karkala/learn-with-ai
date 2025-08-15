@@ -15,10 +15,12 @@ def get_test_headers():
     import time
     
     payload = {
+        "sub": "test_user",  # Use 'sub' instead of 'user_id'
         "user_id": "test_user",
         "email": "test@example.com",
         "role": "user",
         "permissions": ["read", "write"],
+        "type": "access",  # Required by token verification
         "exp": int(time.time()) + 3600,  # 1 hour from now
         "iat": int(time.time())
     }
@@ -57,21 +59,21 @@ def test_chat_endpoint_validation():
     """Test chat endpoint input validation"""
     headers = get_test_headers()
     
-    # Test empty message
+    # Test empty message (with auth headers)
     response = client.post("/api/chat", json={
         "message": "",
         "user_id": "test_user"
     }, headers=headers)
     assert response.status_code == 422
     
-    # Test message with only whitespace
+    # Test message with only whitespace (with auth headers)
     response = client.post("/api/chat", json={
         "message": "   ",
         "user_id": "test_user"
     }, headers=headers)
     assert response.status_code == 422
     
-    # Test message too long
+    # Test message too long (with auth headers)
     long_message = "a" * 5001
     response = client.post("/api/chat", json={
         "message": long_message,
@@ -79,14 +81,21 @@ def test_chat_endpoint_validation():
     }, headers=headers)
     assert response.status_code == 422
     
-    # Test message with harmful content (blocked by security middleware)
+    # Test message with harmful content (with auth headers) - security middleware blocks
     response = client.post("/api/chat", json={
         "message": "Hello <script>alert('xss')</script>",
         "user_id": "test_user"
-    })
-    assert response.status_code == 400
+    }, headers=headers)
+    assert response.status_code == 400  # Security middleware blocks with 400
     
-    # Test valid message
+    # Test without auth headers (should get 401)
+    response = client.post("/api/chat", json={
+        "message": "Hello",
+        "user_id": "test_user"
+    })
+    assert response.status_code == 401
+    
+    # Test valid message (with auth headers)
     response = client.post("/api/chat", json={
         "message": "Hello, I want to learn system design",
         "user_id": "test_user"

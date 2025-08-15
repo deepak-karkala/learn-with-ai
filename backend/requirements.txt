@@ -23,10 +23,20 @@ opik>=0.2.0
 google-cloud-storage>=2.10.0
 google-cloud-aiplatform>=1.38.0
 
+# Security and authentication
+bcrypt>=4.1.0
+pyjwt>=2.8.0
+cryptography>=41.0.0
+python-jose[cryptography]>=3.3.0
+
 # Additional utilities
 sentence-transformers>=2.2.0
 numpy>=1.24.0
 scikit-learn>=1.3.0
+
+# Performance and load testing
+aiohttp>=3.9.0
+psutil>=5.9.0
 
 # Testing dependencies
 pytest>=7.4.0

@@ -39,6 +39,7 @@ from app.api.progress import router as progress_router
 from app.services.diagram_service import DiagramService
 from app.api.diagrams import router as diagrams_router
 from app.api.voice import router as voice_router
+from app.api.auth import router as auth_router
 from app.services.config import settings, setup_logging
 
 # Production services
@@ -48,10 +49,18 @@ from app.services.memory_service import init_memory_service, get_memory_service
 from app.services.monitoring_service import init_monitoring, get_monitoring_service
 from app.services.alerting_service import init_alerting, get_alerting_service
 from app.services.analytics_service import init_analytics, get_analytics_service
+
+# Security services  
+from app.services.auth_service import init_auth_service, get_auth_service
+from app.services.security_service import init_security_service, get_security_service
 from app.services.logging_service import init_logging, get_log_service
 from app.database.connection import init_database
 from app.database.migrations import initialize_database
 from app.middleware import configure_cors, configure_security_middleware
+
+# Performance services
+from app.services.performance_service import init_performance_service, get_performance_service
+from app.middleware.performance import PerformanceMiddleware
 
 # Load environment variables
 load_dotenv()
@@ -173,6 +182,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         init_analytics()
         init_logging()
         
+        # Initialize security services
+        init_auth_service()
+        init_security_service()
+        
+        # Initialize performance services
+        init_performance_service()
+        
         # Initialize database
         if os.getenv("DATABASE_URL"):
             logger.info("Initializing database...")
@@ -253,6 +269,9 @@ app = FastAPI(
 # Configure production middleware
 configure_security_middleware(app)
 configure_cors(app)
+
+# Add performance monitoring middleware
+app.add_middleware(PerformanceMiddleware)
 
 # Add monitoring and rate limiting middleware
 
@@ -860,6 +879,19 @@ app.include_router(
     monitoring_router,
     prefix="/api",
     tags=["monitoring"]
+)
+
+# Authentication API endpoints
+app.include_router(
+    auth_router,
+    tags=["authentication"]
+)
+
+# Performance API endpoints
+from app.api.performance import router as performance_router
+app.include_router(
+    performance_router,
+    tags=["performance"]
 )
 
 

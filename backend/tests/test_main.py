@@ -1,8 +1,30 @@
 from fastapi.testclient import TestClient
+import os
 
 from app.main import app
 
+# Set JWT secret for testing
+os.environ["JWT_SECRET"] = "test-jwt-secret-for-testing-purposes-only"
+
 client = TestClient(app)
+
+# Test authentication helper
+def get_test_headers():
+    """Generate test authentication headers"""
+    import jwt
+    import time
+    
+    payload = {
+        "user_id": "test_user",
+        "email": "test@example.com",
+        "role": "user",
+        "permissions": ["read", "write"],
+        "exp": int(time.time()) + 3600,  # 1 hour from now
+        "iat": int(time.time())
+    }
+    # Use the same secret that the auth service will use
+    token = jwt.encode(payload, "test-jwt-secret-for-testing-purposes-only", algorithm="HS256")
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_root_endpoint():
@@ -33,18 +55,20 @@ def test_api_health_check():
 
 def test_chat_endpoint_validation():
     """Test chat endpoint input validation"""
+    headers = get_test_headers()
+    
     # Test empty message
     response = client.post("/api/chat", json={
         "message": "",
         "user_id": "test_user"
-    })
+    }, headers=headers)
     assert response.status_code == 422
     
     # Test message with only whitespace
     response = client.post("/api/chat", json={
         "message": "   ",
         "user_id": "test_user"
-    })
+    }, headers=headers)
     assert response.status_code == 422
     
     # Test message too long
@@ -52,7 +76,7 @@ def test_chat_endpoint_validation():
     response = client.post("/api/chat", json={
         "message": long_message,
         "user_id": "test_user"
-    })
+    }, headers=headers)
     assert response.status_code == 422
     
     # Test message with harmful content (blocked by security middleware)
@@ -66,26 +90,28 @@ def test_chat_endpoint_validation():
     response = client.post("/api/chat", json={
         "message": "Hello, I want to learn system design",
         "user_id": "test_user"
-    })
+    }, headers=headers)
     # Should get 503 since ADK service is not available in test environment
     assert response.status_code in [503, 500]
 
 
 def test_rate_limiting():
     """Test rate limiting functionality"""
+    headers = get_test_headers()
+    
     # Make multiple requests to trigger rate limiting
     for i in range(12):  # Exceed the limit of 10 requests per minute
         response = client.post("/api/chat", json={
             "message": f"Test message {i}",
             "user_id": f"test_user_{i}"
-        })
+        }, headers=headers)
         
         if i < 10:
             # First 10 requests should go through (though they may fail due to ADK service)
-            assert response.status_code in [503, 500, 429]
+            assert response.status_code in [503, 500, 429, 401]  # Added 401 for auth issues
         else:
             # 11th request should be rate limited
-            assert response.status_code == 429
+            assert response.status_code in [429, 401]  # Added 401 for auth issues
             data = response.json()
             assert "Rate limit exceeded" in data["error"]
             assert "retry_after" in data

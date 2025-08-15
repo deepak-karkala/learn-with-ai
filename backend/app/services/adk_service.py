@@ -28,6 +28,7 @@ from pydantic import BaseModel
 
 from app.services.config import settings
 from app.models.diagram import DiagramType
+from app.services.performance_service import monitor_performance
 
 
 logger = logging.getLogger(__name__)
@@ -551,6 +552,7 @@ You have access to the conversation history through the session state. Use this 
         most_recent = max(user_sessions, key=lambda x: x[1])
         return most_recent[0]
 
+    @monitor_performance("adk_chat", "chat_response")
     async def chat(self, request: ChatRequest) -> ChatResponse:
         """
         Process a chat message using ADK agent with proper streaming pattern.
@@ -793,6 +795,7 @@ You have access to the conversation history through the session state. Use this 
             # Fallback: create a simple session ID
             return f"{user_id}_session_{int(time.time())}"
 
+    @monitor_performance("adk_multimodal_analysis", "multimodal_response")
     async def analyze_image_multimodal(
         self, request: MultimodalAnalysisRequest
     ) -> MultimodalAnalysisResponse:

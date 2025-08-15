@@ -15,6 +15,7 @@ from app.models.whiteboard import (
     WhiteboardAnalysisResponse
 )
 from app.services.adk_service import ADKService
+from app.services.performance_service import monitor_performance
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,7 @@ class WhiteboardService:
             logger.error(f"Failed to upload PNG: {e}")
             raise Exception(f"Upload failed: {str(e)}")
     
+    @monitor_performance("whiteboard_analysis", "whiteboard_analysis_result")
     async def analyze_whiteboard(
         self, 
         request: WhiteboardAnalysisRequest

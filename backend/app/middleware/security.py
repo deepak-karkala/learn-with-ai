@@ -126,12 +126,27 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not rate_limit_result["allowed"]:
             # Track rate limit hit
             from ..services.monitoring_service import get_monitoring_service
+            from ..services.logging_service import log_rate_limit_violation
+            
             monitoring = get_monitoring_service()
             monitoring.track_rate_limit_hit(
                 user_id=client_id,
                 endpoint=endpoint_path,
                 limit=rpm,
                 current_count=rate_limit_result.get("current_count", 0)
+            )
+            
+            # Log rate limit violation for security audit
+            user_id = client_id if client_id.startswith("user:") else None
+            ip_address = client_id.replace("ip:", "") if client_id.startswith("ip:") else client_id
+            
+            log_rate_limit_violation(
+                endpoint=endpoint_path,
+                ip_address=ip_address,
+                user_id=user_id,
+                current_rate=rate_limit_result.get("current_count", 0),
+                limit=rpm,
+                window_seconds=60
             )
             
             # Return rate limit error
@@ -381,6 +396,8 @@ def configure_security_middleware(app) -> None:
     enable_rate_limiting = os.getenv("ENABLE_RATE_LIMITING", "true").lower() == "true"
     enable_input_validation = os.getenv("ENABLE_INPUT_VALIDATION", "true").lower() == "true"
     enable_pii_detection = os.getenv("ENABLE_PII_DETECTION", "true").lower() == "true"
+    enable_authentication = os.getenv("ENABLE_AUTHENTICATION", "true").lower() == "true"
+    enable_api_key_auth = os.getenv("ENABLE_API_KEY_AUTH", "true").lower() == "true"
     
     # Rate limiting configuration
     rate_limit_rpm = int(os.getenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "60"))
@@ -393,6 +410,18 @@ def configure_security_middleware(app) -> None:
         "/api/assessment": {"requests_per_minute": 10, "burst_requests": 2},
         "/api/diagrams": {"requests_per_minute": 15, "burst_requests": 3}
     }
+    
+    # Add authentication middleware (highest priority)
+    if enable_authentication:
+        from .auth_middleware import AuthenticationMiddleware
+        app.add_middleware(AuthenticationMiddleware)
+        logger.info("JWT authentication middleware enabled")
+    
+    # Add API key authentication middleware
+    if enable_api_key_auth:
+        from .auth_middleware import APIKeyMiddleware
+        app.add_middleware(APIKeyMiddleware)
+        logger.info("API key authentication middleware enabled")
     
     # Add security headers middleware
     app.add_middleware(SecurityHeadersMiddleware, enable_hsts=True)

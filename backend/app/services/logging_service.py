@@ -444,3 +444,290 @@ def log_business_event(
             "session_id": session_id
         }
     )
+
+
+# Security audit logging functions
+
+def log_security_event(
+    event_type: str,
+    event_subtype: str,
+    severity: str,
+    details: Dict[str, Any],
+    user_id: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None
+) -> None:
+    """Log security events with comprehensive audit trail."""
+    logger = logging.getLogger("app.security.audit")
+    
+    # Determine log level based on severity
+    if severity.lower() in ['critical', 'high']:
+        log_level = logging.ERROR
+    elif severity.lower() == 'medium':
+        log_level = logging.WARNING
+    else:
+        log_level = logging.INFO
+    
+    logger.log(
+        log_level,
+        f"Security event: {event_type}.{event_subtype} - {severity}",
+        extra={
+            "event_type": "security_event",
+            "security_event_type": event_type,
+            "security_event_subtype": event_subtype,
+            "severity": severity,
+            "details": details,
+            "user_id": user_id,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "audit_trail": True
+        }
+    )
+
+
+def log_authentication_event(
+    action: str,
+    result: str,
+    user_id: Optional[str] = None,
+    email: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    additional_data: Optional[Dict[str, Any]] = None
+) -> None:
+    """Log authentication events for security audit."""
+    logger = logging.getLogger("app.security.auth")
+    
+    # Determine severity and log level
+    if result == "failed":
+        log_level = logging.WARNING
+        severity = "medium"
+    elif action in ["login", "logout", "register"]:
+        log_level = logging.INFO
+        severity = "low"
+    else:
+        log_level = logging.INFO
+        severity = "low"
+    
+    event_data = {
+        "action": action,
+        "result": result,
+        "user_id": user_id,
+        "email": email,
+        "ip_address": ip_address,
+        "user_agent": user_agent
+    }
+    
+    if additional_data:
+        event_data.update(additional_data)
+    
+    logger.log(
+        log_level,
+        f"Authentication {action}: {result}",
+        extra={
+            "event_type": "authentication_event",
+            "action": action,
+            "result": result,
+            "severity": severity,
+            "user_id": user_id,
+            "email": email,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "event_data": event_data,
+            "audit_trail": True
+        }
+    )
+
+
+def log_authorization_event(
+    action: str,
+    resource: str,
+    result: str,
+    user_id: str,
+    required_permissions: List[str],
+    user_permissions: List[str],
+    ip_address: Optional[str] = None
+) -> None:
+    """Log authorization events for audit trail."""
+    logger = logging.getLogger("app.security.authz")
+    
+    # Failed authorization is a security concern
+    log_level = logging.WARNING if result == "denied" else logging.INFO
+    severity = "medium" if result == "denied" else "low"
+    
+    logger.log(
+        log_level,
+        f"Authorization {action} on {resource}: {result}",
+        extra={
+            "event_type": "authorization_event",
+            "action": action,
+            "resource": resource,
+            "result": result,
+            "severity": severity,
+            "user_id": user_id,
+            "required_permissions": required_permissions,
+            "user_permissions": user_permissions,
+            "ip_address": ip_address,
+            "audit_trail": True
+        }
+    )
+
+
+def log_threat_detection(
+    threat_type: str,
+    threat_level: str,
+    details: Dict[str, Any],
+    ip_address: Optional[str] = None,
+    user_id: Optional[str] = None,
+    action_taken: Optional[str] = None
+) -> None:
+    """Log threat detection events."""
+    logger = logging.getLogger("app.security.threats")
+    
+    # Threat detection is always important
+    if threat_level.lower() in ['critical', 'high']:
+        log_level = logging.ERROR
+    elif threat_level.lower() == 'medium':
+        log_level = logging.WARNING
+    else:
+        log_level = logging.INFO
+    
+    logger.log(
+        log_level,
+        f"Threat detected: {threat_type} - {threat_level}",
+        extra={
+            "event_type": "threat_detection",
+            "threat_type": threat_type,
+            "threat_level": threat_level,
+            "details": details,
+            "ip_address": ip_address,
+            "user_id": user_id,
+            "action_taken": action_taken,
+            "audit_trail": True,
+            "alert_required": threat_level.lower() in ['critical', 'high']
+        }
+    )
+
+
+def log_data_access(
+    operation: str,
+    resource_type: str,
+    resource_id: str,
+    user_id: str,
+    ip_address: Optional[str] = None,
+    success: bool = True,
+    sensitive_data: bool = False
+) -> None:
+    """Log data access events for compliance and audit."""
+    logger = logging.getLogger("app.security.data_access")
+    
+    # Failed access to sensitive data is concerning
+    if not success and sensitive_data:
+        log_level = logging.WARNING
+        severity = "medium"
+    elif sensitive_data:
+        log_level = logging.INFO
+        severity = "low"
+    else:
+        log_level = logging.INFO
+        severity = "low"
+    
+    logger.log(
+        log_level,
+        f"Data access: {operation} {resource_type}/{resource_id}",
+        extra={
+            "event_type": "data_access",
+            "operation": operation,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "user_id": user_id,
+            "ip_address": ip_address,
+            "success": success,
+            "sensitive_data": sensitive_data,
+            "severity": severity,
+            "audit_trail": True
+        }
+    )
+
+
+def log_rate_limit_violation(
+    endpoint: str,
+    ip_address: str,
+    user_id: Optional[str] = None,
+    current_rate: int = 0,
+    limit: int = 0,
+    window_seconds: int = 60
+) -> None:
+    """Log rate limit violations for security monitoring."""
+    logger = logging.getLogger("app.security.rate_limit")
+    
+    logger.warning(
+        f"Rate limit violation: {endpoint} from {ip_address}",
+        extra={
+            "event_type": "rate_limit_violation",
+            "endpoint": endpoint,
+            "ip_address": ip_address,
+            "user_id": user_id,
+            "current_rate": current_rate,
+            "limit": limit,
+            "window_seconds": window_seconds,
+            "severity": "medium",
+            "audit_trail": True
+        }
+    )
+
+
+def log_configuration_change(
+    component: str,
+    setting: str,
+    old_value: Any,
+    new_value: Any,
+    changed_by: str,
+    ip_address: Optional[str] = None
+) -> None:
+    """Log configuration changes for audit trail."""
+    logger = logging.getLogger("app.security.config")
+    
+    logger.info(
+        f"Configuration changed: {component}.{setting}",
+        extra={
+            "event_type": "configuration_change",
+            "component": component,
+            "setting": setting,
+            "old_value": str(old_value),
+            "new_value": str(new_value),
+            "changed_by": changed_by,
+            "ip_address": ip_address,
+            "severity": "low",
+            "audit_trail": True
+        }
+    )
+
+
+def log_system_event(
+    event_type: str,
+    message: str,
+    severity: str = "low",
+    details: Optional[Dict[str, Any]] = None
+) -> None:
+    """Log system-level events for monitoring."""
+    logger = logging.getLogger("app.system.events")
+    
+    if severity.lower() in ['critical', 'high']:
+        log_level = logging.ERROR
+    elif severity.lower() == 'medium':
+        log_level = logging.WARNING
+    else:
+        log_level = logging.INFO
+    
+    logger.log(
+        log_level,
+        f"System event: {event_type} - {message}",
+        extra={
+            "event_type": "system_event",
+            "system_event_type": event_type,
+            "message": message,
+            "severity": severity,
+            "details": details or {},
+            "audit_trail": True
+        }
+    )

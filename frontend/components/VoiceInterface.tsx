@@ -11,9 +11,26 @@ interface VoiceInterfaceProps {
    * hidden, but audio playback still functions.
    */
   inline?: boolean
+  /**
+   * Callback fired when voice transcript starts
+   */
+  onTranscriptStart?: (role: 'user' | 'assistant') => void
+  /**
+   * Callback fired when transcript text is updated (streaming)
+   */
+  onTranscriptUpdate?: (transcript: string, role: 'user' | 'assistant') => void
+  /**
+   * Callback fired when voice transcript is complete
+   */
+  onTranscriptComplete?: (role: 'user' | 'assistant') => void
 }
 
-export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
+export function VoiceInterface({ 
+  inline = false, 
+  onTranscriptStart,
+  onTranscriptUpdate, 
+  onTranscriptComplete 
+}: VoiceInterfaceProps) {
   const [status, setStatus] = useState<'idle' | 'recording' | 'processing'>('idle')
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -26,6 +43,10 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
   const isPlayingAIAudioRef = useRef(false) // Flag to prevent feedback
   const audioPlaybackQueueRef = useRef<{data: string, timestamp: number}[]>([])
   const isProcessingQueueRef = useRef(false)
+  const [accumulatedUserTranscript, setAccumulatedUserTranscript] = useState('')
+  const [accumulatedAssistantTranscript, setAccumulatedAssistantTranscript] = useState('')
+  const isUserTranscriptStartedRef = useRef(false)
+  const isAssistantTranscriptStartedRef = useRef(false)
 
   const processAudioQueue = async () => {
     if (isProcessingQueueRef.current || audioPlaybackQueueRef.current.length === 0) {
@@ -99,6 +120,10 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
 
   const startRecording = async () => {
     try {
+      // Reset transcript state for new recording session
+      setAccumulatedUserTranscript('')
+      setAccumulatedAssistantTranscript('')
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
       audioContextRef.current = new AudioCtx()
@@ -194,7 +219,11 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
 
         // Check if the turn is complete
         if (message_from_server.turn_complete && message_from_server.turn_complete == true) {
-          console.log("Turn complete")
+          // Reset for next turn
+          isUserTranscriptStartedRef.current = false
+          isAssistantTranscriptStartedRef.current = false
+          setAccumulatedUserTranscript('')
+          setAccumulatedAssistantTranscript('')
           return
         }
 
@@ -212,9 +241,31 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
           processAudioQueue()
         }
 
-        // Handle text responses without blocking audio input
+        // Handle only complete segmented text responses
         if (message_from_server.mime_type == "text/plain") {
-          // Text transcription received (logging available if needed)
+          const transcriptText = message_from_server.data?.trim()
+          const role = message_from_server.role || 'assistant'
+          const isComplete = message_from_server.complete || false
+          
+          // Only process complete segmented text
+          if (transcriptText && isComplete) {
+            if (role === 'user') {
+              setAccumulatedUserTranscript(transcriptText)
+            } else {
+              setAccumulatedAssistantTranscript(transcriptText)
+            }
+            
+            // Create complete voice message in one step
+            if (onTranscriptStart) {
+              onTranscriptStart(role)
+            }
+            if (onTranscriptUpdate) {
+              onTranscriptUpdate(transcriptText, role)
+            }
+            if (onTranscriptComplete) {
+              onTranscriptComplete(role)
+            }
+          }
         }
       }
 
@@ -244,6 +295,10 @@ export function VoiceInterface({ inline = false }: VoiceInterfaceProps) {
     isPlayingAIAudioRef.current = false
     isProcessingQueueRef.current = false
     audioPlaybackQueueRef.current = []
+    
+    // DON'T clear transcript state here - let it persist until turn completion
+    // The transcript should remain visible after user stops recording
+    
     setStatus('processing')
   }
 

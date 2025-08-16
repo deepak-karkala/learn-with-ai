@@ -33,26 +33,39 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/health",
             "/docs",
             "/openapi.json",
-            "/redoc"
+            "/redoc",
+            # DEMO MODE: All API endpoints are public for demo/MVP purposes
+            # This allows investors and recruiters to test without account creation
+            # TODO: Re-enable authentication before public release
+            "/api/chat",
+            "/api/whiteboard/upload",
+            "/api/whiteboard/analyze",
+            "/api/assessment",
+            "/api/progress",
+            "/api/monitoring"
         }
         
         # Endpoints that require authentication
+        # DEMO MODE: All API authentication disabled for demo purposes
+        # TODO: Uncomment these for production deployment
         self.auth_required_prefixes = {
-            "/api/chat",
-            "/api/whiteboard", 
-            "/api/assessment",
-            "/api/progress",
-            "/api/monitoring",
-            "/admin"
+            # "/api/chat",           # Disabled for demo
+            # "/api/whiteboard",     # Disabled for demo
+            # "/api/assessment",     # Disabled for demo
+            # "/api/progress",       # Disabled for demo
+            # "/api/monitoring",     # Disabled for demo
+            "/admin"  # Keep admin endpoints protected
         }
         
         # Permission requirements for specific endpoints
+        # DEMO MODE: All permission requirements disabled for demo purposes
+        # TODO: Uncomment these for production deployment
         self.endpoint_permissions = {
-            "/api/whiteboard/analyze": [Permission.WHITEBOARD_ANALYZE],
-            "/api/assessment": [Permission.ASSESSMENT_TAKE],
-            "/api/progress": [Permission.PROGRESS_VIEW],
-            "/api/monitoring": [Permission.ADMIN_MONITORING],
-            "/admin": [Permission.ADMIN_SYSTEM]
+            # "/api/whiteboard/analyze": [Permission.WHITEBOARD_ANALYZE],  # Disabled for demo
+            # "/api/assessment": [Permission.ASSESSMENT_TAKE],              # Disabled for demo
+            # "/api/progress": [Permission.PROGRESS_VIEW],                  # Disabled for demo
+            # "/api/monitoring": [Permission.ADMIN_MONITORING],             # Disabled for demo
+            "/admin": [Permission.ADMIN_SYSTEM]  # Keep admin endpoints protected
         }
     
     async def dispatch(self, request: Request, call_next):

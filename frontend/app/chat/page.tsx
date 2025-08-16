@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { ChatInterface } from '@/components/ChatInterface'
 import { WhiteboardCanvas } from '@/components/WhiteboardCanvas'
 import { Sidebar } from '@/components/Sidebar'
@@ -12,6 +12,9 @@ interface Message {
   content: string
   role: 'user' | 'assistant'
   timestamp: Date
+  type?: 'text' | 'voice'
+  isStreaming?: boolean
+  hasAudio?: boolean
 }
 
 interface AssessmentResult {
@@ -40,6 +43,10 @@ export default function ChatPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [mobileActivePanel, setMobileActivePanel] = useState<'chat' | 'whiteboard'>('chat')
+  const [currentUserVoiceMessage, setCurrentUserVoiceMessage] = useState<Message | null>(null)
+  const [currentAssistantVoiceMessage, setCurrentAssistantVoiceMessage] = useState<Message | null>(null)
+  const currentUserVoiceMessageId = useRef<string | null>(null)
+  const currentAssistantVoiceMessageId = useRef<string | null>(null)
 
   const userId = 'john@example.com' // This would come from auth context
 
@@ -160,6 +167,76 @@ export default function ChatPage() {
     }
   }
 
+  // Voice message handling functions
+  const handleVoiceTranscriptStart = (role: 'user' | 'assistant') => {
+    const voiceMessage: Message = {
+      id: `voice_${role}_${Date.now()}`,
+      content: '',
+      role: role,
+      timestamp: new Date(),
+      type: 'voice',
+      isStreaming: true,
+      hasAudio: role === 'assistant' // Only assistant messages have audio playback
+    }
+    
+    if (role === 'user') {
+      currentUserVoiceMessageId.current = voiceMessage.id
+      setCurrentUserVoiceMessage(voiceMessage)
+    } else {
+      currentAssistantVoiceMessageId.current = voiceMessage.id
+      setCurrentAssistantVoiceMessage(voiceMessage)
+    }
+    
+    setMessages(prev => [...prev, voiceMessage])
+  }
+
+  const handleVoiceTranscriptUpdate = (transcript: string, role: 'user' | 'assistant') => {
+    const messageId = role === 'user' ? currentUserVoiceMessageId.current : currentAssistantVoiceMessageId.current
+    
+    if (messageId) {
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === messageId 
+            ? { ...msg, content: transcript }
+            : msg
+        )
+      )
+      // Update current voice message state as well for consistency
+      if (role === 'user') {
+        setCurrentUserVoiceMessage(prev => 
+          prev ? { ...prev, content: transcript } : prev
+        )
+      } else {
+        setCurrentAssistantVoiceMessage(prev => 
+          prev ? { ...prev, content: transcript } : prev
+        )
+      }
+    }
+  }
+
+  const handleVoiceTranscriptComplete = (role: 'user' | 'assistant') => {
+    const messageId = role === 'user' ? currentUserVoiceMessageId.current : currentAssistantVoiceMessageId.current
+    
+    if (messageId) {
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === messageId 
+            ? { ...msg, isStreaming: false }
+            : msg
+        )
+      )
+      
+      // Reset current message tracking for this role
+      if (role === 'user') {
+        setCurrentUserVoiceMessage(null)
+        currentUserVoiceMessageId.current = null
+      } else {
+        setCurrentAssistantVoiceMessage(null)
+        currentAssistantVoiceMessageId.current = null
+      }
+    }
+  }
+
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return
 
@@ -231,15 +308,25 @@ export default function ChatPage() {
     setIsLoading(true)
 
     try {
+      // Format the conversation history as a string
+      const conversationHistory = messages
+        .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+        .join('\n\n')
+      
+      // Create interaction context summary
+      const interactionContext = `System design conversation with ${messages.length} messages. User practiced system design concepts with AI tutor.`
+      
       const response = await fetch('/api/assessment/evaluate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          session_id: sessionId,
           user_id: userId,
-          messages: messages
+          session_id: sessionId,
+          interaction_context: interactionContext,
+          conversation_history: conversationHistory,
+          assessment_type: "system_design"
         }),
       })
 
@@ -250,10 +337,14 @@ export default function ChatPage() {
       const result = await response.json()
       setAssessmentResult(result)
       
+      // Format recommendations for display
+      const recommendations = result.recommendations?.join('\n• ') || 'No specific recommendations available'
+      const nextSteps = result.next_steps?.join('\n• ') || 'No specific next steps provided'
+      
       // Add assessment result as a message
       const assessmentMessage: Message = {
         id: (Date.now() + 2).toString(),
-        content: `🎯 **Assessment Complete**\n\n**Overall Score:** ${result.overall_score}/5.0\n\n**Feedback:** ${result.feedback}\n\n**Strengths:** ${result.strengths.join(', ')}\n\n**Areas for Improvement:** ${result.improvement_areas.join(', ')}`,
+        content: `🎯 **Assessment Complete**\n\n**Overall Score:** ${result.overall_score}/5.0 (Confidence: ${result.confidence_score}/5.0)\n\n**Summary:** ${result.summary}\n\n**Detailed Feedback:** ${result.detailed_feedback}\n\n**Recommendations:**\n• ${recommendations}\n\n**Next Steps:**\n• ${nextSteps}`,
         role: 'assistant',
         timestamp: new Date()
       }
@@ -429,6 +520,9 @@ export default function ChatPage() {
                   onRequestAssessment={handleRequestAssessment}
                   isLoading={isLoading}
                   showAssessmentButton={true}
+                  onVoiceTranscriptStart={handleVoiceTranscriptStart}
+                  onVoiceTranscriptUpdate={handleVoiceTranscriptUpdate}
+                  onVoiceTranscriptComplete={handleVoiceTranscriptComplete}
                 />
               </div>
             </div>
@@ -531,6 +625,9 @@ export default function ChatPage() {
                       onRequestAssessment={handleRequestAssessment}
                       isLoading={isLoading}
                       showAssessmentButton={true}
+                      onVoiceTranscriptStart={handleVoiceTranscriptStart}
+                      onVoiceTranscriptUpdate={handleVoiceTranscriptUpdate}
+                      onVoiceTranscriptComplete={handleVoiceTranscriptComplete}
                     />
                   </div>
                 </div>

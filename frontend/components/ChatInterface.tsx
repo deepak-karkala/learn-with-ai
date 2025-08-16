@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
 import { Badge } from './ui/badge'
 import { ScrollArea } from './ui/scroll-area'
 import { Separator } from './ui/separator'
-import { Send, Bot, User, AlertCircle } from 'lucide-react'
+import { Send, Bot, User, AlertCircle, Mic, Volume2 } from 'lucide-react'
 import { AssessmentButton } from './AssessmentButton'
 import { VoiceInterface } from './VoiceInterface'
 import { useTheme } from '@/contexts/ThemeContext'
@@ -18,6 +18,9 @@ export interface Message {
     content: string
     role: 'user' | 'assistant'
     timestamp: Date
+    type?: 'text' | 'voice'
+    isStreaming?: boolean
+    hasAudio?: boolean
     isLoading?: boolean
     metadata?: {
         topic?: string
@@ -42,6 +45,9 @@ interface ChatInterfaceProps {
     isTyping?: boolean
     className?: string
     showAssessmentButton?: boolean
+    onVoiceTranscriptStart?: (role: 'user' | 'assistant') => void
+    onVoiceTranscriptUpdate?: (transcript: string, role: 'user' | 'assistant') => void
+    onVoiceTranscriptComplete?: (role: 'user' | 'assistant') => void
 }
 
 export function ChatInterface({
@@ -52,7 +58,10 @@ export function ChatInterface({
     error = null,
     isTyping = false,
     className = '',
-    showAssessmentButton = false
+    showAssessmentButton = false,
+    onVoiceTranscriptStart,
+    onVoiceTranscriptUpdate,
+    onVoiceTranscriptComplete
 }: ChatInterfaceProps) {
     const { theme } = useTheme()
     const [inputValue, setInputValue] = useState('')
@@ -203,12 +212,36 @@ export function ChatInterface({
                               )
                     }`}>
                         <CardContent className="p-4">
+                            {/* Voice message header */}
+                            {message.type === 'voice' && (
+                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+                                    {message.role === 'user' ? (
+                                        <Mic className="w-4 h-4 text-green-500" />
+                                    ) : (
+                                        <Volume2 className="w-4 h-4 text-blue-500" />
+                                    )}
+                                    <span className={`text-xs font-medium ${
+                                        message.role === 'user' ? 'text-green-600' : 'text-blue-600'
+                                    }`}>
+                                        {message.role === 'user' ? 'Your Voice' : 'AI Voice Response'}
+                                        {message.isStreaming && (
+                                            <span className="ml-2 inline-flex items-center">
+                                                <div className={`w-2 h-2 rounded-full animate-pulse mr-1 ${
+                                                    message.role === 'user' ? 'bg-green-500' : 'bg-blue-500'
+                                                }`} />
+                                                {message.role === 'user' ? 'Speaking...' : 'AI Speaking...'}
+                                            </span>
+                                        )}
+                                    </span>
+                                </div>
+                            )}
+                            
                             <div className="flex items-start justify-between gap-2">
                                 <p
                                     className="text-sm leading-relaxed"
                                     {...(!isUser ? { 'data-testid': 'ai-response' } : {})}
                                 >
-                                    {message.content}
+                                    {message.content || (message.isStreaming ? '...' : '')}
                                 </p>
                                 <span className={`text-xs ${isUser ? 'text-blue-100' : 'text-gray-500'}`}>
                                     {formatTimestamp(message.timestamp)}
@@ -355,7 +388,12 @@ export function ChatInterface({
                                 data-testid="message-input"
                             />
                         </div>
-                        <VoiceInterface inline />
+                        <VoiceInterface 
+                            inline 
+                            onTranscriptStart={onVoiceTranscriptStart}
+                            onTranscriptUpdate={onVoiceTranscriptUpdate}
+                            onTranscriptComplete={onVoiceTranscriptComplete}
+                        />
                         <Button
                             type="submit"
                             disabled={!inputValue.trim() || isLoading || isSubmitting}

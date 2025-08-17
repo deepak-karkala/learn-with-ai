@@ -381,7 +381,7 @@ describe('WhiteboardCanvas', () => {
             
             // Check some key buttons by text
             expect(screen.getByText('Save PNG')).toBeInTheDocument()
-            expect(screen.getByText('Analyze')).toBeInTheDocument()
+            expect(screen.getByText('AI Design Review')).toBeInTheDocument()
             expect(screen.getByText('Select')).toBeInTheDocument()
             expect(screen.getByText('Connect')).toBeInTheDocument()
         })

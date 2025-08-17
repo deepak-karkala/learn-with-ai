@@ -27,7 +27,7 @@ jest.mock('../components/WhiteboardCanvas', () => ({
                 Save Whiteboard
             </button>
             <button onClick={() => onAnalyze('mock-png-data')}>
-                Analyze Whiteboard
+                AI Design Review
             </button>
             {isAnalyzing && <div>Analyzing...</div>}
         </div>
@@ -213,7 +213,7 @@ describe('ChatPage', () => {
         render(<ChatPage />)
         
         // Whiteboard should be visible in main view
-        const analyzeButton = screen.getByText('Analyze Whiteboard')
+        const analyzeButton = screen.getByText('AI Design Review')
         fireEvent.click(analyzeButton)
 
         await waitFor(() => {

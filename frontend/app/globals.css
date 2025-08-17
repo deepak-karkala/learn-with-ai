@@ -76,3 +76,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Chat bubble text wrapping fix */
+.chat-text-wrap {
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  white-space: pre-wrap !important;
+  hyphens: auto !important;
+}

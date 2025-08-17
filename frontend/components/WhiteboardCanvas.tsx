@@ -27,7 +27,8 @@ import {
     MousePointer,
     Undo,
     Redo,
-    Loader2
+    Loader2,
+    Sparkles
 } from 'lucide-react'
 
 export interface SystemBlock {
@@ -602,43 +603,6 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
 
     return (
         <div className="h-full flex flex-col">
-            {/* Main Action Buttons - Compact */}
-            <div className={`p-3 border-b flex justify-center items-center gap-3 ${
-                theme === 'dark' 
-                    ? 'border-gray-700/50 bg-gray-800/50' 
-                    : 'border-gray-200/50 bg-gray-50/50'
-            }`}>
-                <Button
-                    variant="default"
-                    size="sm"
-                    onClick={saveCanvas}
-                    disabled={blocks.length === 0}
-                    className="h-8 px-4 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-all duration-200"
-                >
-                    <Download className="h-3 w-3 mr-1.5" />
-                    Save PNG
-                </Button>
-                <Button
-                    variant="default"
-                    size="sm"
-                    onClick={handleAnalyzeWhiteboard}
-                    disabled={isAnalyzing || blocks.length === 0}
-                    className="h-8 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-all duration-200"
-                    data-testid="analyze-button"
-                >
-                    {isAnalyzing ? (
-                        <>
-                            <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                            Analyzing...
-                        </>
-                    ) : (
-                        <>
-                            <Target className="h-3 w-3 mr-1.5" />
-                            Analyze
-                        </>
-                    )}
-                </Button>
-            </div>
 
             {/* Compact Toolbar */}
             <div className={`p-2 border-b flex justify-center items-center ${
@@ -779,6 +743,44 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                         />
                     </div>
                 )}
+            </div>
+
+            {/* Action Buttons at Bottom */}
+            <div className={`p-3 border-t flex justify-center items-center gap-3 ${
+                theme === 'dark' 
+                    ? 'border-gray-700/50 bg-gray-800/50' 
+                    : 'border-gray-200/50 bg-gray-50/50'
+            }`}>
+                <Button
+                    variant="default"
+                    size="sm"
+                    onClick={saveCanvas}
+                    disabled={blocks.length === 0}
+                    className="h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all duration-200"
+                >
+                    <Download className="h-4 w-4 mr-2" />
+                    Save PNG
+                </Button>
+                <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleAnalyzeWhiteboard}
+                    disabled={isAnalyzing || blocks.length === 0}
+                    className="h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all duration-200"
+                    data-testid="analyze-button"
+                >
+                    {isAnalyzing ? (
+                        <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Getting Feedback...
+                        </>
+                    ) : (
+                        <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            AI Design Review
+                        </>
+                    )}
+                </Button>
             </div>
 
         </div>

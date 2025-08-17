@@ -1,11 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { ChatInterface } from '@/components/ChatInterface'
-import { WhiteboardCanvas } from '@/components/WhiteboardCanvas'
-import { Sidebar } from '@/components/Sidebar'
-import { Button } from "@/components/ui/button"
-import { useTheme } from '@/contexts/ThemeContext'
+import { ChatInterface } from '../../components/ChatInterface'
+import { WhiteboardCanvas } from '../../components/WhiteboardCanvas'
+import { LearnInterface } from '../../components/LearnInterface'
+import { Sidebar } from '../../components/Sidebar'
+import { Button } from "../../components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
+import { ChevronRight } from 'lucide-react'
+import { useTheme } from '../../contexts/ThemeContext'
 
 interface Message {
   id: string
@@ -42,11 +45,13 @@ export default function ChatPage() {
   const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [mobileActivePanel, setMobileActivePanel] = useState<'chat' | 'whiteboard'>('chat')
+  const [mobileActivePanel, setMobileActivePanel] = useState<'chat' | 'learn' | 'whiteboard'>('chat')
   const [currentUserVoiceMessage, setCurrentUserVoiceMessage] = useState<Message | null>(null)
   const [currentAssistantVoiceMessage, setCurrentAssistantVoiceMessage] = useState<Message | null>(null)
   const currentUserVoiceMessageId = useRef<string | null>(null)
   const currentAssistantVoiceMessageId = useRef<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'learn' | 'practice'>('practice')
+  const [selectedModule, setSelectedModule] = useState<string | null>(null)
 
   const userId = 'john@example.com' // This would come from auth context
 
@@ -446,13 +451,21 @@ export default function ChatPage() {
 
   const handleSwipeLeft = () => {
     if (isMobile) {
-      setMobileActivePanel('whiteboard')
+      if (mobileActivePanel === 'chat') {
+        setMobileActivePanel('learn')
+      } else if (mobileActivePanel === 'learn') {
+        setMobileActivePanel('whiteboard')
+      }
     }
   }
 
   const handleSwipeRight = () => {
     if (isMobile) {
-      setMobileActivePanel('chat')
+      if (mobileActivePanel === 'whiteboard') {
+        setMobileActivePanel('learn')
+      } else if (mobileActivePanel === 'learn') {
+        setMobileActivePanel('chat')
+      }
     }
   }
 
@@ -466,7 +479,31 @@ export default function ChatPage() {
         onSelectSession={handleSelectSession}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onModuleSelect={(moduleId) => {
+          setSelectedModule(moduleId)
+          setActiveTab('learn')
+        }}
+        selectedModule={selectedModule}
       />
+
+      {/* Expand Button for Collapsed Sidebar */}
+      {isSidebarCollapsed && (
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsSidebarCollapsed(false)}
+            className={`absolute top-4 left-2 z-10 p-1 h-8 w-8 rounded-lg shadow-lg ${
+              theme === 'dark' 
+                ? 'bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700 border border-gray-600' 
+                : 'bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-gray-200'
+            }`}
+            title="Expand sidebar"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
@@ -474,10 +511,10 @@ export default function ChatPage() {
           /* Mobile: Single panel with swipe navigation */
           <div className="flex-1 relative">
             {/* Mobile Panel Indicators */}
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex space-x-2">
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex space-x-1">
               <button
                 onClick={() => setMobileActivePanel('chat')}
-                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                className={`px-2 py-1 text-xs rounded-full transition-colors ${
                   mobileActivePanel === 'chat'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-200 text-gray-700'
@@ -486,8 +523,18 @@ export default function ChatPage() {
                 Chat
               </button>
               <button
+                onClick={() => setMobileActivePanel('learn')}
+                className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                  mobileActivePanel === 'learn'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                Learn
+              </button>
+              <button
                 onClick={() => setMobileActivePanel('whiteboard')}
-                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                className={`px-2 py-1 text-xs rounded-full transition-colors ${
                   mobileActivePanel === 'whiteboard'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-200 text-gray-700'
@@ -500,14 +547,15 @@ export default function ChatPage() {
             {/* Mobile Chat Panel */}
             <div
               className={`absolute inset-0 transition-transform duration-300 ${
-                mobileActivePanel === 'chat' ? 'translate-x-0' : '-translate-x-full'
+                mobileActivePanel === 'chat' ? 'translate-x-0' : 
+                mobileActivePanel === 'learn' ? '-translate-x-full' : '-translate-x-[200%]'
               }`}
               onTouchStart={(e) => {
                 const touchStart = e.touches[0].clientX
                 const handleTouchEnd = (endEvent: TouchEvent) => {
                   const touchEnd = endEvent.changedTouches[0].clientX
                   const diff = touchStart - touchEnd
-                  if (diff > 50) handleSwipeLeft() // Swipe left to whiteboard
+                  if (diff > 50) handleSwipeLeft()
                   document.removeEventListener('touchend', handleTouchEnd)
                 }
                 document.addEventListener('touchend', handleTouchEnd)
@@ -527,17 +575,44 @@ export default function ChatPage() {
               </div>
             </div>
 
-            {/* Mobile Whiteboard Panel */}
+            {/* Mobile Learn Panel */}
             <div
               className={`absolute inset-0 transition-transform duration-300 ${
-                mobileActivePanel === 'whiteboard' ? 'translate-x-0' : 'translate-x-full'
+                mobileActivePanel === 'learn' ? 'translate-x-0' : 
+                mobileActivePanel === 'chat' ? 'translate-x-full' : '-translate-x-full'
               }`}
               onTouchStart={(e) => {
                 const touchStart = e.touches[0].clientX
                 const handleTouchEnd = (endEvent: TouchEvent) => {
                   const touchEnd = endEvent.changedTouches[0].clientX
                   const diff = touchEnd - touchStart
-                  if (diff > 50) handleSwipeRight() // Swipe right to chat
+                  if (diff > 50) handleSwipeRight()
+                  if (diff < -50) handleSwipeLeft()
+                  document.removeEventListener('touchend', handleTouchEnd)
+                }
+                document.addEventListener('touchend', handleTouchEnd)
+              }}
+            >
+              <div className="h-full pt-16">
+                <LearnInterface 
+                  selectedModule={selectedModule}
+                  onModuleSelect={setSelectedModule}
+                />
+              </div>
+            </div>
+
+            {/* Mobile Whiteboard Panel */}
+            <div
+              className={`absolute inset-0 transition-transform duration-300 ${
+                mobileActivePanel === 'whiteboard' ? 'translate-x-0' : 
+                mobileActivePanel === 'learn' ? 'translate-x-full' : 'translate-x-[200%]'
+              }`}
+              onTouchStart={(e) => {
+                const touchStart = e.touches[0].clientX
+                const handleTouchEnd = (endEvent: TouchEvent) => {
+                  const touchEnd = endEvent.changedTouches[0].clientX
+                  const diff = touchEnd - touchStart
+                  if (diff > 50) handleSwipeRight()
                   document.removeEventListener('touchend', handleTouchEnd)
                 }
                 document.addEventListener('touchend', handleTouchEnd)
@@ -553,9 +628,9 @@ export default function ChatPage() {
             </div>
           </div>
         ) : (
-          /* Desktop: Video Interview Layout - Whiteboard dominant (75%), Interviewer Panel (25%) */
+          /* Desktop: Video Interview Layout - Main Area (75%), Interviewer Panel (25%) */
           <>
-            {/* Primary Whiteboard Area (75%) */}
+            {/* Primary Content Area (75%) */}
             <div className={`flex flex-col transition-all duration-300 ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`} 
                  style={{ flexBasis: '75%' }}>
               <div className="h-full p-4">
@@ -564,11 +639,72 @@ export default function ChatPage() {
                     ? 'bg-gray-800 ring-1 ring-gray-700' 
                     : 'bg-white ring-1 ring-gray-200'
                 }`}>
-                  <WhiteboardCanvas
-                    onSave={handleWhiteboardSave}
-                    onAnalyze={handleWhiteboardAnalyze}
-                    isAnalyzing={isAnalyzing}
-                  />
+                  <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'learn' | 'practice')} className="h-full flex flex-col">
+                    {/* Tab Navigation */}
+                    <div className={`px-6 pt-4 pb-3 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="flex flex-col items-center space-y-3">
+                        <TabsList className={`grid w-80 grid-cols-2 ${
+                          theme === 'dark' 
+                            ? 'bg-gray-700 text-gray-300' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          <TabsTrigger 
+                            value="learn" 
+                            className={`${
+                              theme === 'dark' 
+                                ? 'data-[state=active]:bg-gray-600 data-[state=active]:text-white' 
+                                : 'data-[state=active]:bg-white data-[state=active]:text-gray-900'
+                            }`}
+                          >
+                            📚 Learn
+                          </TabsTrigger>
+                          <TabsTrigger 
+                            value="practice" 
+                            className={`${
+                              theme === 'dark' 
+                                ? 'data-[state=active]:bg-gray-600 data-[state=active]:text-white' 
+                                : 'data-[state=active]:bg-white data-[state=active]:text-gray-900'
+                            }`}
+                          >
+                            🎯 Practice
+                          </TabsTrigger>
+                        </TabsList>
+                        
+                        {/* Tab Descriptions */}
+                        <div className="text-center">
+                          {activeTab === 'learn' ? (
+                            <p className={`text-sm ${
+                              theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                            }`}>
+                              Interactive tutorials with notes, videos, and audio lessons
+                            </p>
+                          ) : (
+                            <p className={`text-sm ${
+                              theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                            }`}>
+                              Design system architectures and get AI-powered feedback
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tab Content */}
+                    <TabsContent value="learn" className="flex-1 mt-0 h-full overflow-hidden">
+                      <LearnInterface 
+                        selectedModule={selectedModule}
+                        onModuleSelect={setSelectedModule}
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="practice" className="flex-1 mt-0 h-full overflow-hidden">
+                      <WhiteboardCanvas
+                        onSave={handleWhiteboardSave}
+                        onAnalyze={handleWhiteboardAnalyze}
+                        isAnalyzing={isAnalyzing}
+                      />
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </div>
             </div>

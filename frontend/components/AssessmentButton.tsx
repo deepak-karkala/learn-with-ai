@@ -19,9 +19,10 @@ export function AssessmentButton({
 }: AssessmentButtonProps) {
     return (
         <Button
+            variant="default"
             onClick={onRequestAssessment}
             disabled={disabled || isLoading}
-            className={`bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 px-6 py-3 ${className}`}
+            className={`bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 h-9 px-4 text-sm ${className}`}
             data-testid="assessment-button"
         >
             {isLoading ? (
@@ -32,7 +33,7 @@ export function AssessmentButton({
             ) : (
                 <>
                     <Target className="h-4 w-4 mr-2" />
-                    🎯 Get Assessment
+                    Get Assessment
                 </>
             )}
         </Button>

@@ -12,7 +12,7 @@ describe('AssessmentButton', () => {
     it('renders assessment button with correct text', () => {
         render(<AssessmentButton onRequestAssessment={mockOnRequestAssessment} />)
 
-        expect(screen.getByText('🎯 Get Assessment')).toBeInTheDocument()
+        expect(screen.getByText('Get Assessment')).toBeInTheDocument()
         expect(screen.getByTestId('assessment-button')).toBeInTheDocument()
     })
 

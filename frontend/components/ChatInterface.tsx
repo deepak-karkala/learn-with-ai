@@ -192,7 +192,7 @@ export function ChatInterface({
         const isUser = message.role === 'user'
 
         return (
-            <div key={message.id} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+            <div key={message.id} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} w-full`}>
                 {!isUser && (
                     <Avatar className="w-8 h-8">
                         <AvatarImage src="/bot-avatar.png" alt="AI Assistant" />
@@ -202,32 +202,39 @@ export function ChatInterface({
                     </Avatar>
                 )}
 
-                <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
-                    <Card className={`transition-all duration-200 ${
+                <div className={`max-w-[80%] min-w-0 w-full ${isUser ? 'order-first' : ''}`}>
+                    <Card className={`transition-all duration-200 w-full overflow-hidden ${
                         isUser 
-                            ? 'bg-blue-600 text-white shadow-lg' 
+                            ? (theme === 'dark'
+                                ? 'bg-slate-700 border-slate-600 text-white shadow-sm'
+                                : 'bg-slate-200 border-slate-300 text-slate-900 shadow-sm'
+                              )
                             : (theme === 'dark' 
-                                ? 'bg-gray-700 border-gray-600 text-white shadow-sm' 
-                                : 'bg-white border-gray-200 shadow-sm'
+                                ? 'bg-gray-800 border-gray-700 text-gray-100 shadow-sm' 
+                                : 'bg-gray-50 border-gray-200 text-gray-900 shadow-sm'
                               )
                     }`}>
-                        <CardContent className="p-4">
+                        <CardContent className="p-4 w-full overflow-hidden">
                             {/* Voice message header */}
                             {message.type === 'voice' && (
                                 <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
                                     {message.role === 'user' ? (
-                                        <Mic className="w-4 h-4 text-green-500" />
+                                        <Mic className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`} />
                                     ) : (
-                                        <Volume2 className="w-4 h-4 text-blue-500" />
+                                        <Volume2 className={`w-4 h-4 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-500'}`} />
                                     )}
                                     <span className={`text-xs font-medium ${
-                                        message.role === 'user' ? 'text-green-600' : 'text-blue-600'
+                                        message.role === 'user' 
+                                            ? (theme === 'dark' ? 'text-slate-300' : 'text-slate-600')
+                                            : (theme === 'dark' ? 'text-blue-300' : 'text-blue-600')
                                     }`}>
-                                        {message.role === 'user' ? 'Your Voice' : 'AI Voice Response'}
+                                        {message.role === 'user' ? 'Voice Message' : 'AI Voice Response'}
                                         {message.isStreaming && (
                                             <span className="ml-2 inline-flex items-center">
                                                 <div className={`w-2 h-2 rounded-full animate-pulse mr-1 ${
-                                                    message.role === 'user' ? 'bg-green-500' : 'bg-blue-500'
+                                                    message.role === 'user' 
+                                                        ? (theme === 'dark' ? 'bg-slate-400' : 'bg-slate-500')
+                                                        : (theme === 'dark' ? 'bg-blue-400' : 'bg-blue-500')
                                                 }`} />
                                                 {message.role === 'user' ? 'Speaking...' : 'AI Speaking...'}
                                             </span>
@@ -238,12 +245,12 @@ export function ChatInterface({
                             
                             <div className="flex items-start justify-between gap-2">
                                 <p
-                                    className="text-sm leading-relaxed"
+                                    className="text-sm leading-relaxed chat-text-wrap flex-1 min-w-0"
                                     {...(!isUser ? { 'data-testid': 'ai-response' } : {})}
                                 >
                                     {message.content || (message.isStreaming ? '...' : '')}
                                 </p>
-                                <span className={`text-xs ${isUser ? 'text-blue-100' : 'text-gray-500'}`}>
+                                <span className={`text-xs ${isUser ? (theme === 'dark' ? 'text-slate-400' : 'text-slate-500') : (theme === 'dark' ? 'text-gray-400' : 'text-gray-500')}`}>
                                     {formatTimestamp(message.timestamp)}
                                 </span>
                             </div>
@@ -400,12 +407,11 @@ export function ChatInterface({
                             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-all duration-200 shadow-md hover:shadow-lg"
                             data-testid="send-button"
                         >
-                            <Send className="w-4 h-4 mr-2" />
-                            Send
+                            <Send className="w-4 h-4" />
                         </Button>
                     </form>
                     <div className={`text-xs mt-3 text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Press Enter to send, Shift+Enter for new line
+AI can make mistakes. Please verify important information and double-check responses.
                     </div>
                 </div>
             </div>

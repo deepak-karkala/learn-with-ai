@@ -63,7 +63,8 @@ const BLOCK_TYPES = {
         fillColor: '#3b82f6',
         borderHex: '#2563eb',
         width: 120,
-        height: 80
+        height: 80,
+        category: 'networking'
     },
     'web-server': {
         label: 'Web Server',
@@ -71,7 +72,8 @@ const BLOCK_TYPES = {
         fillColor: '#22c55e',
         borderHex: '#16a34a',
         width: 100,
-        height: 60
+        height: 60,
+        category: 'compute'
     },
     'database': {
         label: 'Database',
@@ -79,7 +81,8 @@ const BLOCK_TYPES = {
         fillColor: '#a855f7',
         borderHex: '#9333ea',
         width: 100,
-        height: 60
+        height: 60,
+        category: 'storage'
     },
     'redis': {
         label: 'Redis Cache',
@@ -87,7 +90,8 @@ const BLOCK_TYPES = {
         fillColor: '#ef4444',
         borderHex: '#dc2626',
         width: 100,
-        height: 60
+        height: 60,
+        category: 'storage'
     },
     'api-gateway': {
         label: 'API Gateway',
@@ -95,7 +99,8 @@ const BLOCK_TYPES = {
         fillColor: '#6366f1',
         borderHex: '#4f46e5',
         width: 120,
-        height: 80
+        height: 80,
+        category: 'networking'
     },
     'cdn': {
         label: 'CDN',
@@ -103,7 +108,8 @@ const BLOCK_TYPES = {
         fillColor: '#f97316',
         borderHex: '#ea580c',
         width: 100,
-        height: 60
+        height: 60,
+        category: 'networking'
     },
     'queue': {
         label: 'Message Queue',
@@ -111,7 +117,8 @@ const BLOCK_TYPES = {
         fillColor: '#14b8a6',
         borderHex: '#0d9488',
         width: 120,
-        height: 60
+        height: 60,
+        category: 'messaging'
     },
     'cache': {
         label: 'Cache',
@@ -119,7 +126,8 @@ const BLOCK_TYPES = {
         fillColor: '#ec4899',
         borderHex: '#db2777',
         width: 100,
-        height: 60
+        height: 60,
+        category: 'storage'
     },
     'monitoring': {
         label: 'Monitoring',
@@ -127,7 +135,8 @@ const BLOCK_TYPES = {
         fillColor: '#eab308',
         borderHex: '#ca8a04',
         width: 100,
-        height: 60
+        height: 60,
+        category: 'observability'
     },
     'logging': {
         label: 'Logging',
@@ -135,8 +144,17 @@ const BLOCK_TYPES = {
         fillColor: '#6b7280',
         borderHex: '#4b5563',
         width: 100,
-        height: 60
+        height: 60,
+        category: 'observability'
     }
+}
+
+const COMPONENT_CATEGORIES = {
+    compute: { label: 'Compute', icon: Server },
+    storage: { label: 'Storage', icon: Database },
+    networking: { label: 'Networking', icon: Network },
+    messaging: { label: 'Messaging', icon: HardDrive },
+    observability: { label: 'Observability', icon: Shield }
 }
 
 export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardCanvasProps) {
@@ -209,8 +227,19 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
 
         // Clear canvas and fill with theme-appropriate background
         ctx.clearRect(0, 0, canvas.width, canvas.height)
-        ctx.fillStyle = theme === 'dark' ? '#374151' : '#ffffff'  // gray-700 for dark, white for light
+        ctx.fillStyle = theme === 'dark' ? '#1f2937' : '#ffffff'  // gray-800 for dark, white for light
         ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+        // Show empty state text when no blocks exist
+        if (blocks.length === 0 && connections.length === 0) {
+            ctx.fillStyle = theme === 'dark' ? '#6B7280' : '#9CA3AF'  // gray-500 for dark, gray-400 for light
+            ctx.font = '14px Inter, system-ui, -apple-system, sans-serif'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            const centerX = canvas.width / 2
+            const centerY = canvas.height / 2
+            ctx.fillText('Drag a component from the toolbar or start sketching to begin', centerX, centerY)
+        }
 
         // Draw connections first (behind blocks)
         connections.forEach(connection => {
@@ -227,7 +256,7 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                 ctx.beginPath()
                 ctx.moveTo(fromX, fromY)
                 ctx.lineTo(toX, toY)
-                ctx.strokeStyle = '#6b7280'
+                ctx.strokeStyle = theme === 'dark' ? '#9CA3AF' : '#6b7280'  // gray-400 for dark, gray-500 for light
                 ctx.lineWidth = 2
                 ctx.stroke()
 
@@ -252,7 +281,7 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                 // Draw connection label
                 const midX = (fromX + toX) / 2
                 const midY = (fromY + toY) / 2
-                ctx.fillStyle = theme === 'dark' ? '#D1D5DB' : '#374151'  // gray-300 for dark, gray-700 for light
+                ctx.fillStyle = theme === 'dark' ? '#E5E7EB' : '#374151'  // gray-200 for dark, gray-700 for light
                 ctx.font = selectedConnectionId === connection.id ? 'bold 12px Arial' : '12px Arial'
                 ctx.textAlign = 'center'
                 ctx.fillText((connection.label || '').toString(), midX, midY - 5)
@@ -299,7 +328,7 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
             ctx.textAlign = 'center'
             ctx.fillText(block.label, block.x + block.width / 2, block.y + block.height / 2 + 4)
         })
-    }, [blocks, connections, selectedBlockId])
+    }, [blocks, connections, selectedBlockId, theme])
 
     // Redraw canvas when blocks or connections change, and avoid flicker by batching in rAF
     useEffect(() => {
@@ -751,22 +780,32 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
                     ? 'border-gray-700/50 bg-gray-800/50' 
                     : 'border-gray-200/50 bg-gray-50/50'
             }`}>
+                {/* Secondary Action - Save PNG */}
                 <Button
-                    variant="default"
+                    variant="outline"
                     size="sm"
                     onClick={saveCanvas}
                     disabled={blocks.length === 0}
-                    className="h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all duration-200"
+                    className={`h-9 px-4 text-sm font-medium rounded-lg transition-all duration-200 ${
+                        theme === 'dark'
+                            ? 'border-gray-600 text-gray-300 hover:text-white hover:bg-gray-700'
+                            : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
                 >
                     <Download className="h-4 w-4 mr-2" />
                     Save PNG
                 </Button>
+                {/* Primary CTA - AI Design Review */}
                 <Button
                     variant="default"
                     size="sm"
                     onClick={handleAnalyzeWhiteboard}
                     disabled={isAnalyzing || blocks.length === 0}
-                    className="h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all duration-200"
+                    className={`h-9 px-4 text-sm font-medium rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl ${
+                        theme === 'dark'
+                            ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white'
+                            : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white'
+                    }`}
                     data-testid="analyze-button"
                 >
                     {isAnalyzing ? (

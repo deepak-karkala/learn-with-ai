@@ -295,11 +295,28 @@ export function ChatInterface({
                             <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                                 Welcome to your interview!
                             </h3>
-                            <p className={`text-sm mb-2 leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-                                I'm your AI interviewer. {selectedChapter ? `Today we'll be working on: ${chapterContent.title}` : 'Let\'s start by discussing a system design problem.'}
+                            <p className={`text-sm mb-3 leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
+                                I'm your AI interviewer. {selectedChapter ? `Today we'll be working on: ${chapterContent.title}` : 'Let\'s simulate a real system design interview.'}
                             </p>
+                            <div className={`rounded-lg p-3 mb-4 border ${
+                                theme === 'dark' 
+                                    ? 'bg-purple-900/20 border-purple-700/30' 
+                                    : 'bg-purple-50 border-purple-200'
+                            }`}>
+                                <p className={`text-xs font-semibold mb-2 ${theme === 'dark' ? 'text-purple-300' : 'text-purple-800'}`}>
+                                    🎯 Get detailed 6-dimensional scoring:
+                                </p>
+                                <div className={`grid grid-cols-2 gap-1 text-xs ${theme === 'dark' ? 'text-purple-200' : 'text-purple-700'}`}>
+                                    <div>• Requirements</div>
+                                    <div>• Architecture</div>
+                                    <div>• Technical Deep Dive</div>
+                                    <div>• Scalability</div>
+                                    <div>• Reliability</div>
+                                    <div>• Communication</div>
+                                </div>
+                            </div>
                             <p className={`text-sm mb-4 leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-                                Feel free to use the whiteboard to sketch your ideas as we discuss!
+                                Use the whiteboard to sketch your ideas as we discuss!
                             </p>
                             <div className={`rounded-xl p-3 border ${
                                 theme === 'dark' 

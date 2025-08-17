@@ -94,7 +94,7 @@ export function Sidebar({
   ]
 
   return (
-    <div className={`${theme === 'dark' ? 'bg-gray-900' : 'bg-white border-r border-gray-200'} flex flex-col transition-all duration-300 ${
+    <div className={`${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50 border-r border-gray-200'} flex flex-col transition-all duration-300 ${
       isCollapsed ? 'w-16' : 'w-56'
     }`}>
       {/* Header */}
@@ -202,7 +202,7 @@ export function Sidebar({
           className={`w-full justify-start ${isCollapsed ? 'px-2' : ''} transition-all duration-200 rounded-xl ${
             theme === 'dark' 
               ? 'bg-white/10 hover:bg-white/20 border-gray-700 text-gray-200 hover:text-white'
-              : 'bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-700 hover:text-gray-900'
+              : 'bg-white hover:bg-gray-100 border-gray-300 text-gray-700 hover:text-gray-900 shadow-sm'
           }`}
           variant="outline"
         >

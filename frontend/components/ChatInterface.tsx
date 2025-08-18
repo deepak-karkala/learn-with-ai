@@ -18,10 +18,11 @@ export interface Message {
     content: string
     role: 'user' | 'assistant'
     timestamp: Date
-    type?: 'text' | 'voice'
+    type?: 'text' | 'voice' | 'image'
     isStreaming?: boolean
     hasAudio?: boolean
     isLoading?: boolean
+    imageData?: string // Base64 PNG data for images
     metadata?: {
         topic?: string
         difficulty?: 'beginner' | 'intermediate' | 'advanced'
@@ -374,7 +375,40 @@ export function ChatInterface({
                                     className="text-sm leading-relaxed chat-text-wrap flex-1 min-w-0"
                                     {...(!isUser ? { 'data-testid': 'ai-response' } : {})}
                                 >
-                                    {message.content ? renderMessageContent(message.content) : (message.isStreaming ? '...' : '')}
+                                    {(() => {
+                                        console.log('Message rendering check:', { 
+                                            id: message.id, 
+                                            type: message.type, 
+                                            hasImageData: !!message.imageData,
+                                            imageDataPrefix: message.imageData ? message.imageData.substring(0, 50) : 'none'
+                                        })
+                                        return message.type === 'image' && message.imageData
+                                    })() ? (
+                                        <div className="space-y-2">
+                                            {console.log('Rendering image for message:', message.id, 'src length:', message.imageData?.length)}
+                                            <img 
+                                                src={message.imageData} 
+                                                alt="Saved whiteboard design"
+                                                className={`max-w-full h-auto rounded-lg shadow-sm ${
+                                                    theme === 'dark' 
+                                                        ? 'border border-gray-600' 
+                                                        : 'border border-gray-200'
+                                                }`}
+                                                style={{ maxHeight: '300px' }}
+                                                onLoad={() => console.log('Image loaded successfully for:', message.id)}
+                                                onError={(e) => console.error('Image failed to load for:', message.id, e)}
+                                            />
+                                            {message.content && (
+                                                <div className={`text-sm ${
+                                                    theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
+                                                }`}>
+                                                    {renderMessageContent(message.content)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        message.content ? renderMessageContent(message.content) : (message.isStreaming ? '...' : '')
+                                    )}
                                 </div>
                                 <span className={`text-xs ${isUser ? (theme === 'dark' ? 'text-slate-400' : 'text-slate-500') : (theme === 'dark' ? 'text-gray-400' : 'text-gray-500')}`}>
                                     {formatTimestamp(message.timestamp)}

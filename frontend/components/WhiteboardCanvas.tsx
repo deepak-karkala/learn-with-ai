@@ -802,9 +802,10 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
                             ? 'border-gray-600 text-gray-300 hover:text-white hover:bg-gray-700'
                             : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
+                    title="Save whiteboard design to chat conversation"
                 >
                     <Download className="h-4 w-4 mr-2" />
-                    Save PNG
+                    Save to Chat
                 </Button>
                 {/* Primary CTA - AI Design Review */}
                 <Button

@@ -16,9 +16,10 @@ interface Message {
   content: string
   role: 'user' | 'assistant'
   timestamp: Date
-  type?: 'text' | 'voice'
+  type?: 'text' | 'voice' | 'image'
   isStreaming?: boolean
   hasAudio?: boolean
+  imageData?: string // Base64 PNG data for images
 }
 
 interface AssessmentResult {
@@ -439,7 +440,18 @@ export default function ChatPage() {
 
       const result = await response.json()
       console.log('Whiteboard saved:', result.artifact_id)
-      alert('Whiteboard saved successfully!')
+      
+      // Add the saved image to the chat conversation
+      const imageMessage: Message = {
+        id: `image_${Date.now()}`,
+        content: '📋 System Design Whiteboard',
+        role: 'user',
+        timestamp: new Date(),
+        type: 'image',
+        imageData: pngData
+      }
+      
+      setMessages(prev => [...prev, imageMessage])
     } catch (error) {
       console.error('Upload failed:', error)
       alert('Upload failed. Please try again.')

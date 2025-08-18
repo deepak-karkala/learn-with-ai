@@ -20,6 +20,7 @@ from app.services.adk_service import (
 )
 from app.services.whiteboard_service import WhiteboardService
 from app.api.whiteboard import router as whiteboard_router
+from app.api.content import router as content_router
 from app.models.whiteboard import (
     PNGUploadRequest,
     PNGUploadResponse,
@@ -857,6 +858,13 @@ app.include_router(
     whiteboard_router,
     prefix="/api",
     tags=["whiteboard"]
+)
+
+# Content API endpoints
+app.include_router(
+    content_router,
+    prefix="/api",
+    tags=["content"]
 )
 
 # Diagram API endpoints

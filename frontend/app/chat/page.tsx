@@ -8,6 +8,7 @@ import { Sidebar } from '../../components/Sidebar'
 import { Button } from "../../components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
 import { ChevronRight } from 'lucide-react'
+import { demoSessions, DemoSessionId } from '../../data/demoSessions'
 import { useTheme } from '../../contexts/ThemeContext'
 
 interface Message {
@@ -111,7 +112,7 @@ export default function ChatPage() {
         message_count: messages.length
       },
       {
-        id: 'session_1',
+        id: 'twitter-clone-demo',
         title: 'Design Twitter Clone',
         created_at: '2025-08-13T10:00:00Z',
         message_count: 15
@@ -154,7 +155,14 @@ export default function ChatPage() {
     setAssessmentResult(null)
     localStorage.setItem(`sessionId:${userId}`, selectedSessionId)
     
-    // Load messages for the selected session
+    // Check if this is a demo session
+    if (selectedSessionId in demoSessions) {
+      const demoSession = demoSessions[selectedSessionId as DemoSessionId]
+      setMessages(demoSession.messages)
+      return
+    }
+    
+    // Load messages for regular sessions from localStorage
     const savedMessages = localStorage.getItem(`messages:${selectedSessionId}`)
     if (savedMessages) {
       try {
@@ -571,6 +579,7 @@ export default function ChatPage() {
                   onVoiceTranscriptStart={handleVoiceTranscriptStart}
                   onVoiceTranscriptUpdate={handleVoiceTranscriptUpdate}
                   onVoiceTranscriptComplete={handleVoiceTranscriptComplete}
+                  sessionId={sessionId}
                 />
               </div>
             </div>
@@ -764,6 +773,7 @@ export default function ChatPage() {
                       onVoiceTranscriptStart={handleVoiceTranscriptStart}
                       onVoiceTranscriptUpdate={handleVoiceTranscriptUpdate}
                       onVoiceTranscriptComplete={handleVoiceTranscriptComplete}
+                      sessionId={sessionId}
                     />
                   </div>
                 </div>

@@ -53,6 +53,7 @@ export default function ChatPage() {
   const currentAssistantVoiceMessageId = useRef<string | null>(null)
   const [activeTab, setActiveTab] = useState<'learn' | 'practice'>('practice')
   const [selectedModule, setSelectedModule] = useState<string | null>(null)
+  const [whiteboardClearTrigger, setWhiteboardClearTrigger] = useState(0)
 
   const userId = 'john@example.com' // This would come from auth context
 
@@ -67,8 +68,10 @@ export default function ChatPage() {
     
     // Load existing session from localStorage
     const existingSessionId = localStorage.getItem(`sessionId:${userId}`)
-    if (existingSessionId) {
+    if (existingSessionId && !(existingSessionId in demoSessions)) {
+      // Only load non-demo sessions as main sessions
       setSessionId(existingSessionId)
+      setMainSessionId(existingSessionId) // Set as main session
       // Load session messages from localStorage
       const savedMessages = localStorage.getItem(`messages:${existingSessionId}`)
       if (savedMessages) {
@@ -83,17 +86,25 @@ export default function ChatPage() {
         }
       }
     } else {
-      // Generate new session ID
+      // Generate new session ID if no valid session exists or if stored session is a demo
       const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       setSessionId(newSessionId)
+      setMainSessionId(newSessionId) // Set as main session
       localStorage.setItem(`sessionId:${userId}`, newSessionId)
     }
 
-    // Load sessions list
-    loadSessions()
-
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  // Track the main working session ID (doesn't change when browsing demo sessions)
+  const [mainSessionId, setMainSessionId] = useState<string>('')
+  
+  // Load sessions list when sessionId or mainSessionId changes
+  useEffect(() => {
+    if (sessionId) {
+      loadSessions()
+    }
+  }, [sessionId, mainSessionId])
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
@@ -103,14 +114,8 @@ export default function ChatPage() {
   }, [messages, sessionId])
 
   const loadSessions = async () => {
-    // Mock sessions for development
-    const mockSessions = [
-      {
-        id: sessionId,
-        title: 'Current Session',
-        created_at: new Date().toISOString(),
-        message_count: messages.length
-      },
+    // Mock sessions for development - filter out mainSessionId from other sessions to avoid duplicates
+    const otherSessions = [
       {
         id: 'twitter-clone-demo',
         title: 'Design Twitter Clone',
@@ -129,6 +134,17 @@ export default function ChatPage() {
         created_at: '2025-08-11T09:15:00Z',
         message_count: 18
       }
+    ].filter(session => session.id !== (mainSessionId || sessionId))
+
+    const mockSessions = [
+      {
+        id: `current_session_${mainSessionId || sessionId}`, // Use unique prefix
+        title: 'Current Session',
+        created_at: new Date().toISOString(),
+        message_count: messages.length,
+        isCurrentSession: true // Flag to identify this as the current session
+      },
+      ...otherSessions
     ]
     setSessions(mockSessions)
   }
@@ -136,15 +152,44 @@ export default function ChatPage() {
   const handleNewSession = () => {
     const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     setSessionId(newSessionId)
+    setMainSessionId(newSessionId) // Update main session
     setMessages([])
     setAssessmentResult(null)
+    setWhiteboardClearTrigger(prev => prev + 1) // Trigger whiteboard clear
     localStorage.setItem(`sessionId:${userId}`, newSessionId)
     localStorage.removeItem(`messages:${sessionId}`) // Clear old session messages
     loadSessions()
   }
 
   const handleSelectSession = (selectedSessionId: string) => {
-    if (selectedSessionId === sessionId) return
+    // Check if this is the current session (with the new prefix format)
+    const isCurrentSession = selectedSessionId.startsWith('current_session_')
+    
+    // Early return if selecting the current session - don't clear anything
+    if (selectedSessionId === sessionId || isCurrentSession) {
+      // If it's the current session but we're viewing a different session, switch back to main
+      if (isCurrentSession && sessionId !== mainSessionId) {
+        setSessionId(mainSessionId)
+        // Load main session messages
+        const savedMessages = localStorage.getItem(`messages:${mainSessionId}`)
+        if (savedMessages) {
+          try {
+            const parsedMessages = JSON.parse(savedMessages).map((msg: any) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp)
+            }))
+            setMessages(parsedMessages)
+          } catch (error) {
+            console.error('Failed to parse saved messages:', error)
+            setMessages([])
+          }
+        } else {
+          setMessages([])
+        }
+        setAssessmentResult(null)
+      }
+      return
+    }
     
     // Save current session messages before switching
     if (messages.length > 0) {
@@ -153,14 +198,17 @@ export default function ChatPage() {
     
     setSessionId(selectedSessionId)
     setAssessmentResult(null)
-    localStorage.setItem(`sessionId:${userId}`, selectedSessionId)
     
     // Check if this is a demo session
     if (selectedSessionId in demoSessions) {
+      // Don't update localStorage for demo sessions - keep the main session as the stored session
       const demoSession = demoSessions[selectedSessionId as DemoSessionId]
       setMessages(demoSession.messages)
       return
     }
+    
+    // Only update localStorage for non-demo sessions
+    localStorage.setItem(`sessionId:${userId}`, selectedSessionId)
     
     // Load messages for regular sessions from localStorage
     const savedMessages = localStorage.getItem(`messages:${selectedSessionId}`)
@@ -483,6 +531,7 @@ export default function ChatPage() {
       <Sidebar
         sessions={sessions}
         currentSessionId={sessionId}
+        mainSessionId={mainSessionId}
         onNewSession={handleNewSession}
         onSelectSession={handleSelectSession}
         isCollapsed={isSidebarCollapsed}
@@ -632,6 +681,7 @@ export default function ChatPage() {
                   onSave={handleWhiteboardSave}
                   onAnalyze={handleWhiteboardAnalyze}
                   isAnalyzing={isAnalyzing}
+                  clearTrigger={whiteboardClearTrigger}
                 />
               </div>
             </div>
@@ -711,6 +761,7 @@ export default function ChatPage() {
                         onSave={handleWhiteboardSave}
                         onAnalyze={handleWhiteboardAnalyze}
                         isAnalyzing={isAnalyzing}
+                        clearTrigger={whiteboardClearTrigger}
                       />
                     </TabsContent>
                   </Tabs>

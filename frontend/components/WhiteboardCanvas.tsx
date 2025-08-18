@@ -53,6 +53,7 @@ interface WhiteboardCanvasProps {
     onSave?: (pngData: string) => void
     onAnalyze?: (pngData: string) => void
     isAnalyzing?: boolean
+    clearTrigger?: number
     // Removed onRequestAssessment prop
 }
 
@@ -157,7 +158,7 @@ const COMPONENT_CATEGORIES = {
     observability: { label: 'Observability', icon: Shield }
 }
 
-export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardCanvasProps) {
+export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger }: WhiteboardCanvasProps) {
     const { theme } = useTheme()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [selectedTool, setSelectedTool] = useState<'select' | 'connect'>('select')
@@ -536,15 +537,25 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
     }
 
     // Clear canvas
-    const clearCanvas = () => {
-        // Snapshot clear action
-        snapshot()
+    const clearCanvas = useCallback(() => {
+        // Snapshot clear action - only if we have content to clear
+        if (blocks.length > 0 || connections.length > 0) {
+            snapshot()
+        }
         setBlocks([])
         setConnections([])
         setSelectedBlockId(null)
         setConnectionStart(null)
         setIsConnecting(false)
-    }
+        setMousePos({ x: 0, y: 0 })
+    }, [snapshot, blocks.length, connections.length])
+
+    // Watch for clearTrigger changes to clear the canvas
+    useEffect(() => {
+        if (clearTrigger && clearTrigger > 0) {
+            clearCanvas()
+        }
+    }, [clearTrigger, clearCanvas])
 
     // Save canvas as PNG
     const saveCanvas = () => {

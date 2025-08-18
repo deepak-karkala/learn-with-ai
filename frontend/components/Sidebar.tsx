@@ -42,6 +42,7 @@ interface LearningModule {
 interface SidebarProps {
   sessions: Session[]
   currentSessionId?: string
+  mainSessionId?: string
   onNewSession: () => void
   onSelectSession: (sessionId: string) => void
   isCollapsed?: boolean
@@ -53,6 +54,7 @@ interface SidebarProps {
 export function Sidebar({ 
   sessions, 
   currentSessionId, 
+  mainSessionId,
   onNewSession, 
   onSelectSession,
   isCollapsed = false,
@@ -229,7 +231,8 @@ export function Sidebar({
                     key={session.id}
                     onClick={() => onSelectSession(session.id)}
                     className={`w-full text-left p-1.5 rounded-lg text-sm transition-all duration-200 ${
-                      currentSessionId === session.id
+                      (currentSessionId === session.id || 
+                       (session.id.startsWith('current_session_') && currentSessionId === mainSessionId))
                         ? (theme === 'dark' 
                             ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
                             : 'bg-blue-100 text-blue-900 border border-blue-200'

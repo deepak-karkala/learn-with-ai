@@ -74,10 +74,12 @@ def mock_adk_components():
     }
 
 
+@pytest.mark.external_deps
 class TestADKSessionPersistenceIntegration:
     """Test integration between ADK service and session persistence."""
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_creation_with_persistence(self, mock_session_persistence_service, mock_adk_components):
         """Test that new sessions are saved to persistent storage."""
         with patch('app.services.adk_service.get_session_persistence_service', return_value=mock_session_persistence_service):
@@ -107,6 +109,7 @@ class TestADKSessionPersistenceIntegration:
                         assert call_args[1]['state_data']['skill_level'] == "advanced"
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_restoration_on_chat(self, mock_session_persistence_service, mock_adk_components):
         """Test that sessions are restored from persistent storage during chat."""
         # Mock restored session data
@@ -156,6 +159,7 @@ class TestADKSessionPersistenceIntegration:
                         assert restored_state["learning_progress"]["twitter"] == "completed"
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_conversation_history_preservation(self, mock_session_persistence_service, mock_adk_components):
         """Test that conversation history is preserved across multiple messages."""
         with patch('app.services.adk_service.get_session_persistence_service', return_value=mock_session_persistence_service):
@@ -202,6 +206,7 @@ class TestADKSessionPersistenceIntegration:
                         assert mock_session_persistence_service.save_session_state.call_count >= 2
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_cleanup_with_persistence(self, mock_session_persistence_service, mock_adk_components):
         """Test that expired sessions are cleaned up from both memory and persistent storage."""
         with patch('app.services.adk_service.get_session_persistence_service', return_value=mock_session_persistence_service):
@@ -225,6 +230,7 @@ class TestADKSessionPersistenceIntegration:
                 mock_session_persistence_service.delete_session.assert_called_once()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_user_sessions_from_persistence(self, mock_session_persistence_service, mock_adk_components):
         """Test getting user sessions includes both memory and persistent storage."""
         # Mock persistent sessions
@@ -259,6 +265,7 @@ class TestADKSessionPersistenceIntegration:
                 assert "persistent_session_123" in session_ids
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_conversation_history_retrieval(self, mock_session_persistence_service, mock_adk_components):
         """Test retrieving conversation history from both memory and persistent storage."""
         # Mock persistent conversation history
@@ -294,6 +301,7 @@ class TestADKSessionPersistenceIntegration:
                 assert persistent_history_result[0]["content"] == "Old message"
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_graceful_degradation_without_persistence(self, mock_adk_components):
         """Test that ADK service works gracefully when persistence service is unavailable."""
         # Mock persistence service to fail initialization
@@ -317,6 +325,7 @@ class TestADKSessionPersistenceIntegration:
                         assert response.session_id.startswith("test_user_session_")
 
     @pytest.mark.asyncio 
+    @pytest.mark.external_deps
     async def test_session_migration_on_startup(self, mock_session_persistence_service, mock_adk_components):
         """Test migration of existing in-memory sessions to persistent storage."""
         with patch('app.services.adk_service.get_session_persistence_service', return_value=mock_session_persistence_service):
@@ -352,6 +361,7 @@ class TestADKSessionPersistenceIntegration:
                 assert mock_session_persistence_service.migrate_in_memory_session.call_count == 2
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_concurrent_session_access(self, mock_session_persistence_service, mock_adk_components):
         """Test concurrent access to the same session with persistence."""
         with patch('app.services.adk_service.get_session_persistence_service', return_value=mock_session_persistence_service):
@@ -388,10 +398,12 @@ class TestADKSessionPersistenceIntegration:
                         assert len(history) == 6
 
 
+@pytest.mark.external_deps
 class TestSessionPersistenceFailures:
     """Test handling of persistence service failures."""
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_persistence_save_failure(self, mock_adk_components):
         """Test handling when persistence save fails."""
         mock_persistence = MagicMock()
@@ -420,6 +432,7 @@ class TestSessionPersistenceFailures:
                         assert response.session_id in adk_service._session_states
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_persistence_load_failure(self, mock_adk_components):
         """Test handling when persistence load fails."""
         mock_persistence = MagicMock()

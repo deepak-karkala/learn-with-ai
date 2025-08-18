@@ -11,6 +11,7 @@ from app.services.security_service import (
 )
 
 
+@pytest.mark.external_deps
 class TestSecurityService:
     """Test security service functionality."""
     
@@ -24,6 +25,7 @@ class TestSecurityService:
             service._monitoring_service = Mock()
             return service
     
+    @pytest.mark.external_deps
     def test_data_encryption_and_decryption(self, security_service):
         """Test data encryption and decryption."""
         original_data = "This is sensitive data that needs encryption"
@@ -37,6 +39,7 @@ class TestSecurityService:
         decrypted = security_service.decrypt_data(encrypted)
         assert decrypted == original_data
     
+    @pytest.mark.external_deps
     def test_encrypt_sensitive_fields(self, security_service):
         """Test encryption of sensitive fields in data."""
         data = {
@@ -61,6 +64,7 @@ class TestSecurityService:
         decrypted_data = security_service.decrypt_sensitive_fields(encrypted_data)
         assert decrypted_data == data
     
+    @pytest.mark.external_deps
     def test_request_security_analysis_clean(self, security_service):
         """Test security analysis of clean request."""
         request_data = {
@@ -80,6 +84,7 @@ class TestSecurityService:
         assert security_event.source_ip == "127.0.0.1"
         assert security_event.user_id == "user123"
     
+    @pytest.mark.external_deps
     def test_request_security_analysis_malicious_content(self, security_service):
         """Test security analysis with malicious content."""
         request_data = {
@@ -97,6 +102,7 @@ class TestSecurityService:
         assert security_event.blocked
         assert len(security_event.details["threats_detected"]) > 0
     
+    @pytest.mark.external_deps
     def test_content_threat_detection(self, security_service):
         """Test content threat detection."""
         # XSS attempt
@@ -121,6 +127,7 @@ class TestSecurityService:
         threats = security_service._analyze_content_threats(clean_data)
         assert len(threats) == 0
     
+    @pytest.mark.external_deps
     def test_ip_reputation_checking(self, security_service):
         """Test IP reputation checking."""
         # Test with known good IP
@@ -138,6 +145,7 @@ class TestSecurityService:
         threats = security_service._check_ip_reputation(private_ip)
         assert isinstance(threats, list)
     
+    @pytest.mark.external_deps
     def test_rate_limiting_check(self, security_service):
         """Test rate limiting functionality."""
         security_service._redis_service.is_available.return_value = True
@@ -156,6 +164,7 @@ class TestSecurityService:
         assert result is not None
         assert "rate" in result.lower()
     
+    @pytest.mark.external_deps
     def test_api_key_generation(self, security_service):
         """Test API key generation."""
         user_id = "user123"
@@ -168,6 +177,7 @@ class TestSecurityService:
         assert len(result["secret"]) > 10
         assert result["api_key"] != result["secret"]
     
+    @pytest.mark.external_deps
     def test_api_key_verification(self, security_service):
         """Test API key verification."""
         user_id = "user123"
@@ -193,6 +203,7 @@ class TestSecurityService:
         verification = security_service.verify_api_key(api_key, "wrong_secret")
         assert verification is None
     
+    @pytest.mark.external_deps
     def test_ip_blocking_and_whitelisting(self, security_service):
         """Test IP blocking and whitelisting functionality."""
         ip_address = "192.168.1.100"
@@ -213,6 +224,7 @@ class TestSecurityService:
         # Should be blocked again since block is still active
         assert security_service.is_ip_blocked(ip_address)
     
+    @pytest.mark.external_deps
     def test_request_blocking_logic(self, security_service):
         """Test overall request blocking logic."""
         # Mock IP blocking
@@ -232,6 +244,7 @@ class TestSecurityService:
         security_service.is_ip_whitelisted.return_value = True
         assert not security_service.is_request_blocked(ip_address)
     
+    @pytest.mark.external_deps
     def test_security_metrics_collection(self, security_service):
         """Test security metrics collection."""
         security_service._redis_service.is_available.return_value = True
@@ -245,6 +258,7 @@ class TestSecurityService:
         assert "api_key_usage" in metrics
         assert "ip_blocks" in metrics
     
+    @pytest.mark.external_deps
     def test_security_event_logging(self, security_service):
         """Test security event logging."""
         security_service._redis_service.is_available.return_value = True
@@ -270,6 +284,7 @@ class TestSecurityService:
         # Should send to monitoring for high threats
         security_service._monitoring_service.track_error.assert_called()
     
+    @pytest.mark.external_deps
     def test_hash_functions(self, security_service):
         """Test hashing functions."""
         data = "test_data_to_hash"
@@ -289,6 +304,7 @@ class TestSecurityService:
         assert hmac1 == hmac2  # Same input and secret should produce same HMAC
         assert hmac1 != hash1  # HMAC should be different from plain hash
     
+    @pytest.mark.external_deps
     def test_pii_detection(self, security_service):
         """Test PII detection in data."""
         # Data with PII
@@ -315,6 +331,7 @@ class TestSecurityService:
         detected_pii = security_service.detect_pii(clean_data)
         assert len(detected_pii) == 0
     
+    @pytest.mark.external_deps
     def test_threat_level_escalation(self, security_service):
         """Test threat level escalation logic."""
         # Multiple low threats should escalate
@@ -332,6 +349,7 @@ class TestSecurityService:
         level = security_service._calculate_threat_level(no_threats)
         assert level == ThreatLevel.LOW
     
+    @pytest.mark.external_deps
     def test_data_sanitization(self, security_service):
         """Test data sanitization functions."""
         # Test HTML sanitization
@@ -351,6 +369,7 @@ class TestSecurityService:
         assert "<script>" not in clean_string
         assert "normal text" in clean_string
     
+    @pytest.mark.external_deps
     def test_session_security(self, security_service):
         """Test session security features."""
         user_id = "user123"
@@ -371,6 +390,7 @@ class TestSecurityService:
         )
         assert not is_hijacked
     
+    @pytest.mark.external_deps
     def test_anomaly_detection(self, security_service):
         """Test anomaly detection in user behavior."""
         user_id = "user123"

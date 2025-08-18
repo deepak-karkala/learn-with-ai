@@ -12,6 +12,7 @@ from app.services.auth_service import (
 )
 
 
+@pytest.mark.external_deps
 class TestAuthenticationService:
     """Test authentication service functionality."""
     
@@ -30,6 +31,7 @@ class TestAuthenticationService:
             service._clear_failed_login_attempts = Mock()
             return service
     
+    @pytest.mark.external_deps
     def test_password_hashing_and_verification(self, auth_service):
         """Test password hashing and verification."""
         password = "TestPassword123!"
@@ -47,6 +49,7 @@ class TestAuthenticationService:
         hashed2 = auth_service._hash_password(password)
         assert hashed != hashed2
     
+    @pytest.mark.external_deps
     def test_user_registration_success(self, auth_service):
         """Test successful user registration."""
         auth_service._validate_email = Mock(return_value=True)
@@ -65,6 +68,7 @@ class TestAuthenticationService:
         assert result["user_id"] == "user123"
         assert result["message"] == "User registered successfully"
     
+    @pytest.mark.external_deps
     def test_user_registration_existing_user(self, auth_service):
         """Test registration with existing user."""
         auth_service._validate_email = Mock(return_value=True)
@@ -80,6 +84,7 @@ class TestAuthenticationService:
         assert not result["success"]
         assert result["error"] == "User already exists"
     
+    @pytest.mark.external_deps
     def test_user_registration_weak_password(self, auth_service):
         """Test registration with weak password."""
         auth_service._validate_email = Mock(return_value=True)
@@ -94,6 +99,7 @@ class TestAuthenticationService:
         assert not result["success"]
         assert "password" in result["error"].lower()
     
+    @pytest.mark.external_deps
     def test_authentication_success(self, auth_service):
         """Test successful authentication."""
         # Mock user data
@@ -121,6 +127,7 @@ class TestAuthenticationService:
         assert result["refresh_token"] == "refresh_token"
         assert result["token_type"] == "bearer"
     
+    @pytest.mark.external_deps
     def test_authentication_wrong_password(self, auth_service):
         """Test authentication with wrong password."""
         user_data = {
@@ -143,6 +150,7 @@ class TestAuthenticationService:
         assert result["error"] == "Invalid credentials"
         auth_service._record_failed_login.assert_called_once()
     
+    @pytest.mark.external_deps
     def test_authentication_user_not_found(self, auth_service):
         """Test authentication with non-existent user."""
         auth_service._get_user_by_email.return_value = None
@@ -156,6 +164,7 @@ class TestAuthenticationService:
         assert not result["success"]
         assert result["error"] == "Invalid credentials"
     
+    @pytest.mark.external_deps
     def test_authentication_account_locked(self, auth_service):
         """Test authentication with locked account."""
         auth_service._is_account_locked.return_value = True
@@ -169,6 +178,7 @@ class TestAuthenticationService:
         assert not result["success"]
         assert "locked" in result["error"].lower()
     
+    @pytest.mark.external_deps
     def test_authentication_inactive_account(self, auth_service):
         """Test authentication with inactive account."""
         user_data = {
@@ -190,6 +200,7 @@ class TestAuthenticationService:
         assert not result["success"]
         assert "deactivated" in result["error"].lower()
     
+    @pytest.mark.external_deps
     def test_jwt_token_generation(self, auth_service):
         """Test JWT token generation."""
         user_data = {
@@ -211,6 +222,7 @@ class TestAuthenticationService:
         # Tokens should be different
         assert access_token != refresh_token
     
+    @pytest.mark.external_deps
     def test_jwt_token_verification(self, auth_service):
         """Test JWT token verification."""
         user_data = {
@@ -229,6 +241,7 @@ class TestAuthenticationService:
         assert token_data["role"] == "user"
         assert token_data["type"] == "access"
     
+    @pytest.mark.external_deps
     def test_expired_token_verification(self, auth_service):
         """Test verification of expired token."""
         user_data = {
@@ -250,6 +263,7 @@ class TestAuthenticationService:
             token_data = auth_service.verify_token(access_token)
             assert token_data is None
     
+    @pytest.mark.external_deps
     def test_refresh_token_functionality(self, auth_service):
         """Test refresh token functionality."""
         auth_service._verify_refresh_token = Mock(return_value={
@@ -265,6 +279,7 @@ class TestAuthenticationService:
         assert result["access_token"] == "new_access_token"
         assert result["token_type"] == "bearer"
     
+    @pytest.mark.external_deps
     def test_invalid_refresh_token(self, auth_service):
         """Test refresh with invalid token."""
         auth_service._verify_refresh_token = Mock(return_value=None)
@@ -274,6 +289,7 @@ class TestAuthenticationService:
         assert not result["success"]
         assert "invalid" in result["error"].lower()
     
+    @pytest.mark.external_deps
     def test_role_permissions_mapping(self, auth_service):
         """Test role-based permissions mapping."""
         # Test guest permissions
@@ -293,6 +309,7 @@ class TestAuthenticationService:
         assert Permission.ADMIN_SYSTEM in admin_permissions
         assert len(admin_permissions) > len(user_permissions)
     
+    @pytest.mark.external_deps
     def test_permission_checking(self, auth_service):
         """Test permission checking functionality."""
         user_permissions = [Permission.CHAT_ACCESS, Permission.WHITEBOARD_CREATE]
@@ -303,6 +320,7 @@ class TestAuthenticationService:
         # User doesn't have permission
         assert not auth_service.has_permission("user123", Permission.ADMIN_SYSTEM, user_permissions)
     
+    @pytest.mark.external_deps
     def test_password_strength_validation(self, auth_service):
         """Test password strength validation."""
         # Strong password
@@ -315,6 +333,7 @@ class TestAuthenticationService:
         assert not auth_service._validate_password_strength("NoNumbers!")
         assert not auth_service._validate_password_strength("NoSpecialChars123")
     
+    @pytest.mark.external_deps
     def test_email_validation(self, auth_service):
         """Test email validation."""
         # Valid emails
@@ -327,6 +346,7 @@ class TestAuthenticationService:
         assert not auth_service._validate_email("user@")
         assert not auth_service._validate_email("")
     
+    @pytest.mark.external_deps
     def test_account_lockout_mechanism(self, auth_service):
         """Test account lockout after failed attempts."""
         auth_service._redis_service = Mock()
@@ -345,6 +365,7 @@ class TestAuthenticationService:
         auth_service._redis_service.get_cache.return_value = auth_service._max_login_attempts
         assert auth_service._is_account_locked(email)
     
+    @pytest.mark.external_deps
     def test_change_password(self, auth_service):
         """Test password change functionality."""
         user_data = {
@@ -365,6 +386,7 @@ class TestAuthenticationService:
         assert "changed" in result["message"].lower()
         auth_service._update_user_password.assert_called_once()
     
+    @pytest.mark.external_deps
     def test_change_password_wrong_current(self, auth_service):
         """Test password change with wrong current password."""
         user_data = {

@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from app.services.assessment_service import AssessmentService
 
@@ -16,9 +17,11 @@ def get_test_client():
 client = get_test_client()
 
 
+@pytest.mark.external_deps
 class TestAssessmentE2E:
     """End-to-end tests for the assessment system"""
 
+    @pytest.mark.external_deps
     def test_complete_assessment_workflow(self):
         """Test complete assessment workflow from creation to retrieval"""
 
@@ -139,6 +142,7 @@ class TestAssessmentE2E:
         assert len(paginated_data["assessments"]) <= 1
         assert paginated_data["has_more"] == (paginated_data["total_count"] > 1)
 
+    @pytest.mark.external_deps
     def test_assessment_error_handling(self):
         """Test error handling for invalid assessment requests"""
 
@@ -167,6 +171,7 @@ class TestAssessmentE2E:
         response = client.post("/api/assessment/evaluate", json=long_context_request)
         assert response.status_code == 422  # Validation error
 
+    @pytest.mark.external_deps
     def test_assessment_not_found(self):
         """Test handling of non-existent assessment"""
 
@@ -180,6 +185,7 @@ class TestAssessmentE2E:
         assert response.status_code == 404
         assert "Assessment not found" in response.json()["detail"]
 
+    @pytest.mark.external_deps
     def test_assessment_cleanup(self):
         """Test assessment cleanup functionality"""
 
@@ -188,6 +194,7 @@ class TestAssessmentE2E:
         assert response.status_code == 200
         assert "Cleanup completed" in response.json()["message"]
 
+    @pytest.mark.external_deps
     def test_multiple_assessments_same_user(self):
         """Test multiple assessments for the same user"""
 
@@ -242,6 +249,7 @@ class TestAssessmentE2E:
         client.delete(f"/api/assessment/{assessment1_id}")
         client.delete(f"/api/assessment/{assessment2_id}")
 
+    @pytest.mark.external_deps
     def test_assessment_dimensions_validation(self):
         """Test that all 6 dimensions are properly scored and validated"""
 

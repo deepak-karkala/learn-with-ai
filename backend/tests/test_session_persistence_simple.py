@@ -19,10 +19,12 @@ from app.services.session_persistence_service import (
 )
 
 
+@pytest.mark.external_deps
 class TestSessionPersistenceBasic:
     """Basic tests for session persistence service."""
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_service_initialization(self):
         """Test that service initializes correctly."""
         service = SessionPersistenceService()
@@ -44,6 +46,7 @@ class TestSessionPersistenceBasic:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_backup_scheduling(self):
         """Test session backup scheduling."""
         service = SessionPersistenceService()
@@ -60,6 +63,7 @@ class TestSessionPersistenceBasic:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_size_validation(self):
         """Test session size validation."""
         service = SessionPersistenceService()
@@ -85,6 +89,7 @@ class TestSessionPersistenceBasic:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_metadata_creation(self):
         """Test session metadata creation."""
         session_id = "test_session_123"
@@ -109,6 +114,7 @@ class TestSessionPersistenceBasic:
         assert metadata.version == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_backup_creation(self):
         """Test session backup creation."""
         session_id = "test_session_123"
@@ -134,6 +140,7 @@ class TestSessionPersistenceBasic:
         assert len(backup.conversation_history) == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_version_increment(self):
         """Test session version increment logic."""
         service = SessionPersistenceService()
@@ -164,6 +171,7 @@ class TestSessionPersistenceBasic:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_creation_time_extraction(self):
         """Test extracting creation time from session ID."""
         service = SessionPersistenceService()
@@ -182,6 +190,7 @@ class TestSessionPersistenceBasic:
         assert extracted_time.timestamp() <= time.time()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_graceful_degradation_without_adk(self):
         """Test that service works without ADK artifacts available."""
         # Mock environment where ADK is not available
@@ -200,6 +209,7 @@ class TestSessionPersistenceBasic:
                 await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_background_worker_initialization(self):
         """Test that background workers are properly managed."""
         service = SessionPersistenceService()
@@ -220,10 +230,12 @@ class TestSessionPersistenceBasic:
         assert service._cleanup_task.cancelled() or service._cleanup_task.done()
 
 
+@pytest.mark.external_deps
 class TestSessionPersistenceWithMockRedis:
     """Test session persistence with mocked Redis."""
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_save_with_redis_fallback(self):
         """Test saving session with Redis fallback."""
         # Mock Redis service
@@ -255,6 +267,7 @@ class TestSessionPersistenceWithMockRedis:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_load_with_redis_fallback(self):
         """Test loading session with Redis fallback."""
         # Mock Redis service with data
@@ -293,6 +306,7 @@ class TestSessionPersistenceWithMockRedis:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_delete_with_redis_cleanup(self):
         """Test deleting session cleans up Redis data."""
         mock_redis = MagicMock()
@@ -328,10 +342,12 @@ class TestSessionPersistenceWithMockRedis:
         await service.shutdown()
 
 
+@pytest.mark.external_deps
 class TestSessionPersistenceErrorHandling:
     """Test error handling in session persistence."""
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_redis_unavailable_graceful_handling(self):
         """Test graceful handling when Redis is unavailable."""
         mock_redis = MagicMock()
@@ -356,6 +372,7 @@ class TestSessionPersistenceErrorHandling:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_malformed_metadata_handling(self):
         """Test handling of malformed metadata."""
         mock_redis = MagicMock()
@@ -379,6 +396,7 @@ class TestSessionPersistenceErrorHandling:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_concurrent_access_safety(self):
         """Test concurrent access safety."""
         service = SessionPersistenceService()

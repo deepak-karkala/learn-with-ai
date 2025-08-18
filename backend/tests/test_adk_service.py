@@ -15,9 +15,11 @@ from app.services.adk_service import (
 )
 
 
+@pytest.mark.external_deps
 class TestADKService:
     """Test cases for ADKService"""
 
+    @pytest.mark.external_deps
     def test_init_success(self):
         """Test successful ADK service initialization"""
         with patch("app.services.adk_service.Agent") as mock_agent:
@@ -31,6 +33,7 @@ class TestADKService:
             assert service.app_name == "systemdesign-ai-platform"
             mock_agent.assert_called_once()
 
+    @pytest.mark.external_deps
     def test_init_exception(self):
         """Test ADK service initialization with exception"""
         with patch(
@@ -39,6 +42,7 @@ class TestADKService:
             with pytest.raises(Exception, match="Init error"):
                 ADKService()
 
+    @pytest.mark.external_deps
     def test_health_check_configured(self):
         """Test health check when service is properly configured"""
         with patch("app.services.adk_service.Agent") as mock_agent:
@@ -65,6 +69,7 @@ class TestADKService:
             }
             assert health == expected
 
+    @pytest.mark.external_deps
     def test_health_check_not_configured(self):
         """Test health check when agent is not initialized"""
         with patch("app.services.adk_service.Agent") as mock_agent:
@@ -83,6 +88,7 @@ class TestADKService:
             assert health["agent_name"] is None
             assert health["capabilities"] == []
 
+    @pytest.mark.external_deps
     def test_health_check_exception(self):
         """Test health check with exception"""
         with patch("app.services.adk_service.Agent") as mock_agent:
@@ -100,6 +106,7 @@ class TestADKService:
             assert "error" in health
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_chat_agent_not_initialized(self):
         """Test chat when agent is not initialized"""
         with patch("app.services.adk_service.Agent") as mock_agent:
@@ -119,6 +126,7 @@ class TestADKService:
             assert "Service not available" in response.message
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_chat_success_with_mocked_streaming(self):
         """Test successful chat with mocked ADK streaming"""
         # Mock ADK components
@@ -190,6 +198,7 @@ class TestADKService:
             mock_queue_instance.close.assert_called_once()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_chat_empty_response(self):
         """Test chat with empty response from agent"""
         with (
@@ -239,6 +248,7 @@ class TestADKService:
             assert "couldn't generate a response" in response.message
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_chat_exception_handling(self):
         """Test chat exception handling"""
         with (
@@ -265,6 +275,7 @@ class TestADKService:
             assert response.error == "Internal error"
             assert "technical difficulties" in response.message
 
+    @pytest.mark.external_deps
     def test_get_session_info(self):
         """Test get session info functionality"""
         with patch("app.services.adk_service.Agent") as mock_agent:
@@ -292,6 +303,7 @@ class TestADKService:
             assert session_info["architecture"] == "streaming"
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_create_session_success(self):
         """Test successful session creation"""
         with patch("app.services.adk_service.Agent") as mock_agent, patch(
@@ -333,6 +345,7 @@ class TestADKService:
             assert response.error is None
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_create_session_failure(self):
         """Test session creation failure"""
         with patch("app.services.adk_service.Agent") as mock_agent, patch(
@@ -360,6 +373,7 @@ class TestADKService:
             assert response.state == {}
             assert "Session creation error" in response.error
 
+    @pytest.mark.external_deps
     def test_get_user_sessions(self):
         """Test getting user sessions"""
         with patch("app.services.adk_service.Agent") as mock_agent:
@@ -384,6 +398,7 @@ class TestADKService:
             assert "active_sessions" in sessions_info
             assert sessions_info["user_id"] == "test_user"
 
+    @pytest.mark.external_deps
     def test_session_expiry(self):
         """Test session expiry functionality"""
         with patch("app.services.adk_service.Agent") as mock_agent, patch(
@@ -408,6 +423,7 @@ class TestADKService:
             assert service._is_session_expired(fresh_session_id) is False
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_chat_with_session_state_persistence(self):
         """Test that chat maintains session state across calls"""
         with (

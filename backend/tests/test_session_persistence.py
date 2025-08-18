@@ -77,10 +77,12 @@ def sample_session_data():
     }
 
 
+@pytest.mark.external_deps
 class TestSessionPersistenceService:
     """Test the SessionPersistenceService class."""
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_initialization(self):
         """Test service initialization."""
         service = SessionPersistenceService()
@@ -96,6 +98,7 @@ class TestSessionPersistenceService:
         await service.shutdown()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_save_session_state_success(self, persistence_service, sample_session_data, mock_redis_service):
         """Test successful session state saving."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -118,6 +121,7 @@ class TestSessionPersistenceService:
             mock_redis_service.set_cache.assert_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_save_session_state_oversized(self, persistence_service):
         """Test session state saving with oversized data."""
         # Create oversized session data (> 10MB)
@@ -133,6 +137,7 @@ class TestSessionPersistenceService:
         assert success is False
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_load_session_state_success(self, persistence_service, sample_session_data, mock_redis_service):
         """Test successful session state loading."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -157,6 +162,7 @@ class TestSessionPersistenceService:
             assert "metadata" in loaded_data
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_load_session_state_wrong_user(self, persistence_service, sample_session_data, mock_redis_service):
         """Test loading session state with wrong user ID."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -178,6 +184,7 @@ class TestSessionPersistenceService:
             assert loaded_data is None
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_delete_session(self, persistence_service, sample_session_data, mock_redis_service):
         """Test session deletion."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -202,6 +209,7 @@ class TestSessionPersistenceService:
             assert sample_session_data["session_id"] not in persistence_service._session_metadata_cache
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_get_user_sessions(self, persistence_service, mock_redis_service):
         """Test getting all sessions for a user."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -228,6 +236,7 @@ class TestSessionPersistenceService:
                 assert session_id in session_ids
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_get_most_recent_session(self, persistence_service, mock_redis_service):
         """Test getting the most recent session for a user."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -258,6 +267,7 @@ class TestSessionPersistenceService:
             assert recent_session.session_id == newer_session
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_migrate_in_memory_session(self, persistence_service, mock_redis_service):
         """Test migrating an in-memory session to persistent storage."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -282,6 +292,7 @@ class TestSessionPersistenceService:
             assert session_id in persistence_service._session_metadata_cache
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_cleanup_expired_sessions(self, persistence_service, mock_redis_service):
         """Test cleanup of expired sessions."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -307,6 +318,7 @@ class TestSessionPersistenceService:
             assert session_id not in persistence_service._session_metadata_cache
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_backup_scheduling(self, persistence_service):
         """Test session backup scheduling."""
         session_id = "test_session_backup"
@@ -317,6 +329,7 @@ class TestSessionPersistenceService:
         assert session_id in persistence_service._pending_saves
 
     @pytest.mark.asyncio 
+    @pytest.mark.external_deps
     async def test_adk_artifacts_integration(self, persistence_service):
         """Test ADK artifacts integration when available."""
         # Mock ADK artifact components
@@ -343,10 +356,12 @@ class TestSessionPersistenceService:
                 mock_session_context.save_artifact.assert_called_once()
 
 
+@pytest.mark.external_deps
 class TestSessionPersistenceIntegration:
     """Integration tests for session persistence with other services."""
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_session_persistence_across_restart(self, persistence_service, mock_redis_service):
         """Test that sessions persist across service restarts."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -372,6 +387,7 @@ class TestSessionPersistenceIntegration:
             assert loaded_data["session_state"]["persistent"] == "data"
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_long_term_session_continuity(self, persistence_service, mock_redis_service):
         """Test long-term session continuity (months later)."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -402,6 +418,7 @@ class TestSessionPersistenceIntegration:
             assert len(loaded_data["conversation_history"]) == 2
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_fallback_mechanisms(self, persistence_service):
         """Test fallback mechanisms for corrupted or missing artifacts."""
         # Test with corrupted Redis data
@@ -414,6 +431,7 @@ class TestSessionPersistenceIntegration:
             assert loaded_data is None
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_performance_optimization(self, persistence_service, mock_redis_service):
         """Test performance optimization for artifact operations."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -441,10 +459,12 @@ class TestSessionPersistenceIntegration:
             assert (end_time - start_time) < 5.0  # 5 seconds for 10 operations
 
 
+@pytest.mark.external_deps
 class TestSessionPersistenceErrorCases:
     """Test error cases and edge conditions."""
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_redis_unavailable(self, persistence_service):
         """Test graceful handling when Redis is unavailable."""
         mock_redis = MagicMock()
@@ -463,6 +483,7 @@ class TestSessionPersistenceErrorCases:
             assert isinstance(success, bool)
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_adk_artifacts_unavailable(self, persistence_service, mock_redis_service):
         """Test fallback when ADK artifacts are unavailable."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):
@@ -480,6 +501,7 @@ class TestSessionPersistenceErrorCases:
             assert success is True
 
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_concurrent_access(self, persistence_service, mock_redis_service):
         """Test concurrent access to session persistence."""
         with patch.object(persistence_service, 'redis_service', mock_redis_service):

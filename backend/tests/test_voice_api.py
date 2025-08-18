@@ -1,3 +1,4 @@
+import pytest
 """Tests for voice streaming WebSocket endpoint."""
 
 import asyncio
@@ -51,12 +52,14 @@ class TextRunner(AudioRunner):
         return generator()
 
 
+@pytest.mark.external_deps
 class TestVoiceAPI:
     """Test cases for the /api/voice WebSocket endpoint."""
 
     def setup_method(self):
         self.client = TestClient(app)
 
+    @pytest.mark.external_deps
     def test_voice_streaming(self, monkeypatch):
         service = ADKService()
         monkeypatch.setattr(service, "_get_or_create_runner", AsyncMock(return_value=AudioRunner()))
@@ -81,6 +84,7 @@ class TestVoiceAPI:
             audio_data = base64.b64decode(response_data["data"])
             assert audio_data == b"audio_out"
 
+    @pytest.mark.external_deps
     def test_voice_streaming_fallback(self, monkeypatch):
         service = ADKService()
         monkeypatch.setattr(service, "_get_or_create_runner", AsyncMock(return_value=TextRunner()))

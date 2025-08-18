@@ -12,6 +12,7 @@ from app.services.auth_service import AuthenticationService, UserRole
 from app.services.security_service import SecurityService
 
 
+@pytest.mark.external_deps
 class TestSecurityIntegration:
     """Test complete security system integration."""
     
@@ -36,6 +37,7 @@ class TestSecurityIntegration:
             mock.return_value = service
             yield service
     
+    @pytest.mark.external_deps
     def test_user_registration_flow(self, client, auth_service):
         """Test complete user registration flow."""
         # Mock successful registration
@@ -64,6 +66,7 @@ class TestSecurityIntegration:
         assert data["success"]
         assert data["user_id"] == "user123"
     
+    @pytest.mark.external_deps
     def test_user_registration_blocked_by_security(self, client, auth_service):
         """Test user registration blocked by security analysis."""
         # Mock security analysis (high threat)
@@ -84,6 +87,7 @@ class TestSecurityIntegration:
         data = response.json()
         assert "security restrictions" in data["detail"]
     
+    @pytest.mark.external_deps
     def test_user_login_flow(self, client, auth_service):
         """Test complete user login flow."""
         # Mock successful authentication
@@ -117,6 +121,7 @@ class TestSecurityIntegration:
         assert data["access_token"] == "jwt_access_token"
         assert data["token_type"] == "bearer"
     
+    @pytest.mark.external_deps
     def test_failed_login_attempts_tracking(self, client, auth_service):
         """Test failed login attempts are tracked."""
         # Mock failed authentication
@@ -142,6 +147,7 @@ class TestSecurityIntegration:
         # Verify authentication service was called for each attempt
         assert auth_service.authenticate_user.call_count == 3
     
+    @pytest.mark.external_deps
     def test_jwt_protected_endpoint_access(self, client):
         """Test access to JWT protected endpoints."""
         # Mock authentication middleware
@@ -165,6 +171,7 @@ class TestSecurityIntegration:
             # Note: This would require the middleware to be properly configured
             # In a real test, you'd need to set up the full middleware stack
     
+    @pytest.mark.external_deps
     def test_rate_limiting_enforcement(self, client):
         """Test rate limiting enforcement."""
         # Mock rate limiting in middleware
@@ -180,6 +187,7 @@ class TestSecurityIntegration:
             # Note: Actual rate limiting test would need proper setup
             # This is a simplified example
     
+    @pytest.mark.external_deps
     def test_security_headers_in_response(self, client):
         """Test security headers are added to responses."""
         response = client.get("/health")
@@ -193,6 +201,7 @@ class TestSecurityIntegration:
         # assert "X-Frame-Options" in headers
         # assert "X-XSS-Protection" in headers
     
+    @pytest.mark.external_deps
     def test_cors_configuration(self, client):
         """Test CORS configuration."""
         # Test preflight request
@@ -206,6 +215,7 @@ class TestSecurityIntegration:
         # Note: Actual CORS headers would be added by CORSMiddleware
         assert response.status_code in [200, 204]
     
+    @pytest.mark.external_deps
     def test_input_validation_middleware(self, client):
         """Test input validation middleware."""
         # Test with malicious input
@@ -220,6 +230,7 @@ class TestSecurityIntegration:
             # In a real test, the middleware would intercept and block
             pass
     
+    @pytest.mark.external_deps
     def test_pii_detection_in_requests(self, client):
         """Test PII detection in request data."""
         # Test with PII data
@@ -234,6 +245,7 @@ class TestSecurityIntegration:
             # In a real test, the middleware would log the detection
             pass
     
+    @pytest.mark.external_deps
     def test_api_key_authentication(self, client):
         """Test API key authentication flow."""
         # Generate API key
@@ -254,6 +266,7 @@ class TestSecurityIntegration:
                     assert "api_key" in data
                     assert "secret" in data
     
+    @pytest.mark.external_deps
     def test_token_refresh_flow(self, client, auth_service):
         """Test token refresh flow."""
         # Mock successful token refresh
@@ -272,6 +285,7 @@ class TestSecurityIntegration:
             data = response.json()
             assert data["access_token"] == "new_access_token"
     
+    @pytest.mark.external_deps
     def test_logout_flow(self, client, auth_service):
         """Test user logout flow."""
         auth_service.revoke_refresh_token.return_value = None
@@ -286,6 +300,7 @@ class TestSecurityIntegration:
                 data = response.json()
                 assert "logged out" in data["message"].lower()
     
+    @pytest.mark.external_deps
     def test_admin_security_endpoints(self, client):
         """Test admin-only security endpoints."""
         # Mock admin user
@@ -308,6 +323,7 @@ class TestSecurityIntegration:
                     data = response.json()
                     assert "security_metrics" in data
     
+    @pytest.mark.external_deps
     def test_non_admin_access_to_admin_endpoints(self, client):
         """Test non-admin user access to admin endpoints."""
         # Mock regular user
@@ -322,6 +338,7 @@ class TestSecurityIntegration:
             # Should be forbidden
             assert response.status_code == 403
     
+    @pytest.mark.external_deps
     def test_comprehensive_security_flow(self, client, auth_service, security_service):
         """Test comprehensive security flow with multiple components."""
         # 1. Register user

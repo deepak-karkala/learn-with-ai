@@ -14,6 +14,7 @@ from app.middleware.auth_middleware import (
 from app.services.auth_service import Permission
 
 
+@pytest.mark.external_deps
 class TestAuthenticationMiddleware:
     """Test authentication middleware functionality."""
     
@@ -39,6 +40,7 @@ class TestAuthenticationMiddleware:
         return request
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_public_endpoint_access(self, auth_middleware, mock_request):
         """Test access to public endpoints without authentication."""
         mock_request.url.path = "/health"
@@ -50,6 +52,7 @@ class TestAuthenticationMiddleware:
         assert response is not None
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_protected_endpoint_without_token(self, auth_middleware, mock_request):
         """Test access to protected endpoint without token."""
         mock_request.url.path = "/api/chat"
@@ -65,6 +68,7 @@ class TestAuthenticationMiddleware:
         call_next.assert_not_called()
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_blocked_ip_access(self, auth_middleware, mock_request):
         """Test access from blocked IP address."""
         auth_middleware.security_service.is_request_blocked.return_value = True
@@ -77,6 +81,7 @@ class TestAuthenticationMiddleware:
         call_next.assert_not_called()
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_valid_token_access(self, auth_middleware, mock_request):
         """Test access with valid JWT token."""
         mock_request.url.path = "/api/chat"
@@ -99,6 +104,7 @@ class TestAuthenticationMiddleware:
         assert mock_request.state.user["user_id"] == "user123"
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_invalid_token_access(self, auth_middleware, mock_request):
         """Test access with invalid JWT token."""
         mock_request.url.path = "/api/chat"
@@ -115,6 +121,7 @@ class TestAuthenticationMiddleware:
         call_next.assert_not_called()
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_insufficient_permissions(self, auth_middleware, mock_request):
         """Test access with insufficient permissions."""
         mock_request.url.path = "/api/admin"
@@ -136,6 +143,7 @@ class TestAuthenticationMiddleware:
         assert response.status_code == 403
         call_next.assert_not_called()
     
+    @pytest.mark.external_deps
     def test_client_ip_extraction(self, auth_middleware, mock_request):
         """Test client IP extraction from request."""
         # Test direct client IP
@@ -153,6 +161,7 @@ class TestAuthenticationMiddleware:
         ip = auth_middleware._get_client_ip(mock_request)
         assert ip == "192.168.1.200"
     
+    @pytest.mark.external_deps
     def test_requires_auth_check(self, auth_middleware):
         """Test authentication requirement checking."""
         # Public endpoints
@@ -165,6 +174,7 @@ class TestAuthenticationMiddleware:
         assert auth_middleware._requires_auth("/api/whiteboard")
         assert auth_middleware._requires_auth("/admin/users")
     
+    @pytest.mark.external_deps
     def test_token_extraction(self, auth_middleware, mock_request):
         """Test JWT token extraction from request."""
         # No Authorization header
@@ -188,6 +198,7 @@ class TestAuthenticationMiddleware:
         result = auth_middleware._extract_and_validate_token(mock_request)
         assert result is not None
     
+    @pytest.mark.external_deps
     def test_token_claims_validation(self, auth_middleware):
         """Test JWT token claims validation."""
         # Valid token claims
@@ -216,6 +227,7 @@ class TestAuthenticationMiddleware:
         }
         assert not auth_middleware._validate_token_claims(expired_claims)
     
+    @pytest.mark.external_deps
     def test_permission_checking(self, auth_middleware):
         """Test permission checking logic."""
         token_data = {
@@ -234,6 +246,7 @@ class TestAuthenticationMiddleware:
         assert not auth_middleware._check_permissions("/api/admin", token_data)
 
 
+@pytest.mark.external_deps
 class TestAPIKeyMiddleware:
     """Test API key middleware functionality."""
     
@@ -256,6 +269,7 @@ class TestAPIKeyMiddleware:
         return request
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_non_api_key_endpoint(self, api_key_middleware, mock_request):
         """Test endpoint that doesn't support API key auth."""
         mock_request.url.path = "/api/chat"  # Not in api_key_endpoints
@@ -266,6 +280,7 @@ class TestAPIKeyMiddleware:
         call_next.assert_called_once_with(mock_request)
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_missing_api_key_headers(self, api_key_middleware, mock_request):
         """Test API key endpoint without headers."""
         mock_request.headers = {}
@@ -276,6 +291,7 @@ class TestAPIKeyMiddleware:
         call_next.assert_called_once_with(mock_request)
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_invalid_api_key(self, api_key_middleware, mock_request):
         """Test with invalid API key."""
         mock_request.headers = {
@@ -293,6 +309,7 @@ class TestAPIKeyMiddleware:
         call_next.assert_not_called()
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_valid_api_key(self, api_key_middleware, mock_request):
         """Test with valid API key."""
         mock_request.headers = {
@@ -312,6 +329,7 @@ class TestAPIKeyMiddleware:
         assert mock_request.state.api_key["user_id"] == "user123"
 
 
+@pytest.mark.external_deps
 class TestUtilityFunctions:
     """Test utility functions for authentication."""
     
@@ -334,6 +352,7 @@ class TestUtilityFunctions:
         request.state = Mock()
         return request
     
+    @pytest.mark.external_deps
     def test_get_current_user(self, mock_request_with_user, mock_request_without_user):
         """Test get_current_user function."""
         # With user
@@ -345,6 +364,7 @@ class TestUtilityFunctions:
         user = get_current_user(mock_request_without_user)
         assert user is None
     
+    @pytest.mark.external_deps
     def test_get_current_user_id(self, mock_request_with_user, mock_request_without_user):
         """Test get_current_user_id function."""
         # With user
@@ -355,6 +375,7 @@ class TestUtilityFunctions:
         user_id = get_current_user_id(mock_request_without_user)
         assert user_id is None
     
+    @pytest.mark.external_deps
     def test_require_permission(self, mock_request_with_user, mock_request_without_user):
         """Test require_permission function."""
         # User with permission
@@ -370,6 +391,7 @@ class TestUtilityFunctions:
         assert not has_permission
     
     @pytest.mark.asyncio
+    @pytest.mark.external_deps
     async def test_get_current_active_user(self, mock_request_with_user, mock_request_without_user):
         """Test get_current_active_user dependency."""
         # With user
@@ -381,6 +403,7 @@ class TestUtilityFunctions:
             await get_current_active_user(mock_request_without_user)
         assert exc_info.value.status_code == 401
     
+    @pytest.mark.external_deps
     def test_middleware_error_handling(self, auth_middleware, mock_request):
         """Test middleware error handling."""
         mock_request.url.path = "/api/chat"

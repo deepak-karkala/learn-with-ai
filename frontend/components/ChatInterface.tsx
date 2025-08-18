@@ -48,6 +48,7 @@ interface ChatInterfaceProps {
     onVoiceTranscriptStart?: (role: 'user' | 'assistant') => void
     onVoiceTranscriptUpdate?: (transcript: string, role: 'user' | 'assistant') => void
     onVoiceTranscriptComplete?: (role: 'user' | 'assistant') => void
+    sessionId?: string
 }
 
 export function ChatInterface({
@@ -61,7 +62,8 @@ export function ChatInterface({
     showAssessmentButton = false,
     onVoiceTranscriptStart,
     onVoiceTranscriptUpdate,
-    onVoiceTranscriptComplete
+    onVoiceTranscriptComplete,
+    sessionId
 }: ChatInterfaceProps) {
     const { theme } = useTheme()
     const [inputValue, setInputValue] = useState('')
@@ -188,31 +190,155 @@ export function ChatInterface({
         return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
 
+    // Enhanced markdown renderer for images and text formatting
+    const renderMessageContent = (content: string) => {
+        const parts = []
+        let lastIndex = 0
+        
+        // Combined regex for images and text formatting
+        const markdownRegex = /(!?\[([^\]]*)\]\(([^)]+)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(`([^`]+)`)|(\n)/g
+        let match
+
+        while ((match = markdownRegex.exec(content)) !== null) {
+            // Add text before the current match
+            if (match.index > lastIndex) {
+                const textContent = content.slice(lastIndex, match.index)
+                if (textContent.trim()) {
+                    parts.push(
+                        <span key={`text-${lastIndex}`}>{textContent}</span>
+                    )
+                }
+            }
+
+            if (match[1]) {
+                // Image syntax: ![alt](src)
+                const [, , altText, src] = match
+                parts.push(
+                    <div key={`img-${match.index}`} className="my-3">
+                        <img 
+                            src={src} 
+                            alt={altText} 
+                            className="max-w-full h-auto rounded-lg shadow-md border border-gray-200"
+                            style={{ maxHeight: '400px' }}
+                        />
+                        {altText && (
+                            <p className="text-xs text-gray-500 mt-1 text-center italic">
+                                {altText}
+                            </p>
+                        )}
+                    </div>
+                )
+            } else if (match[4]) {
+                // Bold syntax: **text**
+                const boldText = match[5]
+                parts.push(
+                    <strong key={`bold-${match.index}`} className="font-bold">
+                        {boldText}
+                    </strong>
+                )
+            } else if (match[6]) {
+                // Italic syntax: *text*
+                const italicText = match[7]
+                parts.push(
+                    <em key={`italic-${match.index}`} className="italic">
+                        {italicText}
+                    </em>
+                )
+            } else if (match[8]) {
+                // Code syntax: `text`
+                const codeText = match[9]
+                parts.push(
+                    <code key={`code-${match.index}`} className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm font-mono">
+                        {codeText}
+                    </code>
+                )
+            } else if (match[10]) {
+                // Line break
+                parts.push(
+                    <br key={`br-${match.index}`} />
+                )
+            }
+
+            lastIndex = markdownRegex.lastIndex
+        }
+
+        // Add remaining text after the last match
+        if (lastIndex < content.length) {
+            const remainingContent = content.slice(lastIndex)
+            if (remainingContent.trim()) {
+                parts.push(
+                    <span key={`text-${lastIndex}`}>{remainingContent}</span>
+                )
+            }
+        }
+
+        // If no markdown found, return the original content but with line breaks
+        if (parts.length === 0) {
+            return content.split('\n').map((line, index) => (
+                <React.Fragment key={index}>
+                    {index > 0 && <br />}
+                    {line}
+                </React.Fragment>
+            ))
+        }
+
+        return parts
+    }
+
     const renderMessage = (message: Message) => {
         const isUser = message.role === 'user'
+        
+        // Check if this message contains AI Design Review or Assessment (USP features)
+        const isAIDesignReview = !isUser && (
+            message.content.includes('AI Design Review') ||
+            message.content.includes('COMPONENTS:') ||
+            message.content.includes('FEEDBACK:') ||
+            message.content.includes('SUGGESTIONS:') ||
+            message.content.includes('Architectural feedback') ||
+            message.content.includes('system design diagram')
+        )
+        const isAssessment = !isUser && (message.content.includes('Assessment Complete') || message.metadata?.assessment)
+        const isUSPFeature = isAIDesignReview || isAssessment
 
         return (
             <div key={message.id} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} w-full`}>
                 {!isUser && (
                     <Avatar className="w-8 h-8">
                         <AvatarImage src="/bot-avatar.png" alt="AI Assistant" />
-                        <AvatarFallback className="bg-blue-100 text-blue-600">
+                        <AvatarFallback className={isUSPFeature ? "bg-gradient-to-br from-purple-500 to-blue-600 text-white" : "bg-blue-100 text-blue-600"}>
                             <Bot className="w-4 h-4" />
                         </AvatarFallback>
                     </Avatar>
                 )}
 
                 <div className={`max-w-[80%] min-w-0 w-full ${isUser ? 'order-first' : ''}`}>
+                    {/* USP Feature Badge */}
+                    {isUSPFeature && (
+                        <div className="mb-2 flex justify-center">
+                            <Badge className={`text-xs font-medium px-2 py-1 ${
+                                isAIDesignReview 
+                                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white'
+                                    : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white'
+                            }`}>
+                                {isAIDesignReview ? '🎨 AI Design Review' : '📊 Assessment'}
+                            </Badge>
+                        </div>
+                    )}
                     <Card className={`transition-all duration-200 w-full overflow-hidden ${
-                        isUser 
+                        isUSPFeature
                             ? (theme === 'dark'
-                                ? 'bg-slate-700 border-slate-600 text-white shadow-sm'
-                                : 'bg-slate-200 border-slate-300 text-slate-900 shadow-sm'
+                                ? 'bg-gradient-to-br from-purple-900/30 to-blue-900/30 border-purple-500/50 text-purple-100 shadow-lg ring-1 ring-purple-400/30'
+                                : 'bg-gradient-to-br from-purple-50 to-blue-50 border-purple-300 text-purple-900 shadow-lg ring-1 ring-purple-200'
                               )
-                            : (theme === 'dark' 
-                                ? 'bg-gray-800 border-gray-700 text-gray-100 shadow-sm' 
-                                : 'bg-gray-50 border-gray-200 text-gray-900 shadow-sm'
-                              )
+                            : isUser 
+                                ? (theme === 'dark'
+                                    ? 'bg-slate-700 border-slate-600 text-white shadow-sm'
+                                    : 'bg-slate-200 border-slate-300 text-slate-900 shadow-sm'
+                                  )
+                                : (theme === 'dark' 
+                                    ? 'bg-gray-800 border-gray-700 text-gray-100 shadow-sm' 
+                                    : 'bg-gray-50 border-gray-200 text-gray-900 shadow-sm'
+                                  )
                     }`}>
                         <CardContent className="p-4 w-full overflow-hidden">
                             {/* Voice message header */}
@@ -244,12 +370,12 @@ export function ChatInterface({
                             )}
                             
                             <div className="flex items-start justify-between gap-2">
-                                <p
+                                <div
                                     className="text-sm leading-relaxed chat-text-wrap flex-1 min-w-0"
                                     {...(!isUser ? { 'data-testid': 'ai-response' } : {})}
                                 >
-                                    {message.content || (message.isStreaming ? '...' : '')}
-                                </p>
+                                    {message.content ? renderMessageContent(message.content) : (message.isStreaming ? '...' : '')}
+                                </div>
                                 <span className={`text-xs ${isUser ? (theme === 'dark' ? 'text-slate-400' : 'text-slate-500') : (theme === 'dark' ? 'text-gray-400' : 'text-gray-500')}`}>
                                     {formatTimestamp(message.timestamp)}
                                 </span>
@@ -284,8 +410,21 @@ export function ChatInterface({
         )
     }
 
+    // Check if this is a demo session
+    const isDemoSession = sessionId && ['twitter-clone-demo', 'session_2', 'session_3'].includes(sessionId)
+
     return (
         <div className={`flex flex-col h-full ${className}`}>
+            {/* Demo Badge */}
+            {isDemoSession && (
+                <div className={`px-4 py-2 border-b ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                    <div className="flex items-center justify-center">
+                        <Badge className="bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-medium px-3 py-1">
+                            ✨ Demo Session - Showcasing Product Features
+                        </Badge>
+                    </div>
+                </div>
+            )}
             {/* Messages Area - Only this scrolls */}
             <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 px-4">
                 <div className="space-y-4 py-4">
@@ -427,7 +566,7 @@ export function ChatInterface({
                             <Send className="w-4 h-4" />
                         </Button>
                     </form>
-                    <div className={`text-xs mt-3 text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <div className={`text-[10px] mt-3 text-center ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
 AI can make mistakes. Please verify important information and double-check responses.
                     </div>
                 </div>

@@ -238,7 +238,7 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing }: WhiteboardC
             ctx.textBaseline = 'middle'
             const centerX = canvas.width / 2
             const centerY = canvas.height / 2
-            ctx.fillText('Drag a component from the toolbar or start sketching to begin', centerX, centerY)
+            ctx.fillText('Select and connect the components and get AI powered feedback for your designs', centerX, centerY)
         }
 
         // Draw connections first (behind blocks)

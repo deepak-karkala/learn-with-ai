@@ -1,5 +1,6 @@
 import uuid
 import logging
+import asyncio
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import json
@@ -60,19 +61,22 @@ class AssessmentService:
 
                     client = AsyncOpenAI(api_key=openai_api_key)
 
-                    # Call OpenAI API for assessment
-                    response = await client.chat.completions.create(
-                        model=settings.assessment_model_name,
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": "You are an expert system design assessor. Evaluate the user's system design skills and provide detailed feedback.",
-                            },
-                            {"role": "user", "content": assessment_prompt},
-                        ],
-                        temperature=settings.assessment_temperature,  # Low temperature for consistent scoring
-                        max_tokens=settings.assessment_max_tokens,
-                        response_format={"type": "json_object"},  # Force JSON response
+                    # Call OpenAI API for assessment with timeout
+                    response = await asyncio.wait_for(
+                        client.chat.completions.create(
+                            model=settings.assessment_model_name,
+                            messages=[
+                                {
+                                    "role": "system",
+                                    "content": "You are an expert system design assessor. Evaluate the user's system design skills and provide detailed feedback.",
+                                },
+                                {"role": "user", "content": assessment_prompt},
+                            ],
+                            temperature=settings.assessment_temperature,  # Low temperature for consistent scoring
+                            max_tokens=settings.assessment_max_tokens,
+                            response_format={"type": "json_object"},  # Force JSON response
+                        ),
+                        timeout=90.0  # 90 second timeout for OpenAI API call
                     )
 
                     # Parse the response
@@ -153,6 +157,12 @@ class AssessmentService:
                         assessment_result = await self._get_mock_assessment(
                             request, assessment_prompt
                         )
+                except asyncio.TimeoutError:
+                    logger.error("OpenAI API call timed out after 90 seconds")
+                    logger.warning("⚠️ Falling back to mock assessment due to API timeout")
+                    assessment_result = await self._get_mock_assessment(
+                        request, assessment_prompt
+                    )
                 except (AuthenticationError, Exception) as e:
                     logger.error(f"OpenAI API call failed: {str(e)}")
                     logger.warning("⚠️ Falling back to mock assessment")

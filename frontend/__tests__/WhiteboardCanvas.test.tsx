@@ -253,14 +253,14 @@ describe('WhiteboardCanvas', () => {
         it('renders save button correctly', () => {
             render(<WhiteboardCanvas />)
 
-            const saveButton = screen.getByText('Save PNG')
+            const saveButton = screen.getByText('Save to Chat')
             expect(saveButton).toBeInTheDocument()
         })
 
         it('save button is disabled when no blocks exist', () => {
             render(<WhiteboardCanvas />)
 
-            const saveButton = screen.getByText('Save PNG')
+            const saveButton = screen.getByText('Save to Chat')
             expect(saveButton).toBeDisabled()
         })
 
@@ -270,7 +270,7 @@ describe('WhiteboardCanvas', () => {
             // Add a block
             fireEvent.click(screen.getByText('Load Balancer'))
 
-            const saveButton = screen.getByText('Save PNG')
+            const saveButton = screen.getByText('Save to Chat')
             expect(saveButton).not.toBeDisabled()
         })
     })
@@ -363,7 +363,7 @@ describe('WhiteboardCanvas', () => {
 
             render(<WhiteboardCanvas />)
 
-            const saveButton = screen.getByText('Save PNG')
+            const saveButton = screen.getByText('Save to Chat')
             fireEvent.click(saveButton)
 
             // Component should not crash
@@ -380,7 +380,7 @@ describe('WhiteboardCanvas', () => {
             expect(buttons.length).toBeGreaterThan(0)
             
             // Check some key buttons by text
-            expect(screen.getByText('Save PNG')).toBeInTheDocument()
+            expect(screen.getByText('Save to Chat')).toBeInTheDocument()
             expect(screen.getByText('AI Design Review')).toBeInTheDocument()
             expect(screen.getByText('Select')).toBeInTheDocument()
             expect(screen.getByText('Connect')).toBeInTheDocument()

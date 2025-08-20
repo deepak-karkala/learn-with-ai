@@ -18,16 +18,17 @@ class TestADKAPIIntegration:
         """Setup test client"""
         self.client = TestClient(app)
 
-    @patch("app.main.adk_service")
-    def test_api_health_endpoint(self, mock_adk_service):
+    def test_api_health_endpoint(self):
         """Test API health endpoint with ADK integration"""
-        # Mock ADK service health check
+        # Mock ADK service and set it in app.state
+        mock_adk_service = Mock()
         mock_adk_service.health_check.return_value = {
             "configured": True,
             "agent_name": "system_design_agent",
             "status": "ready",
             "architecture": "streaming",
         }
+        app.state.adk_service = mock_adk_service
 
         response = self.client.get("/api/health")
 
@@ -39,14 +40,15 @@ class TestADKAPIIntegration:
         assert data["adk_info"]["configured"] is True
         assert data["adk_info"]["agent_name"] == "system_design_agent"
 
-    @patch("app.main.adk_service")
-    def test_api_health_endpoint_adk_not_ready(self, mock_adk_service):
+    def test_api_health_endpoint_adk_not_ready(self):
         """Test API health endpoint when ADK is not ready"""
         # Mock ADK service not ready
+        mock_adk_service = Mock()
         mock_adk_service.health_check.return_value = {
             "configured": False,
             "status": "not_configured",
         }
+        app.state.adk_service = mock_adk_service
 
         response = self.client.get("/api/health")
 
@@ -57,9 +59,8 @@ class TestADKAPIIntegration:
         assert data["services"]["adk"] == "not_configured"
         assert data["adk_info"]["configured"] is False
 
-    @patch("app.main.adk_service")
     @pytest.mark.asyncio
-    async def test_chat_endpoint_success(self, mock_adk_service):
+    async def test_chat_endpoint_success(self):
         """Test successful chat endpoint"""
         # Mock successful ADK response
         mock_response = ChatResponse(
@@ -68,7 +69,9 @@ class TestADKAPIIntegration:
             session_id="test_user_session",
             error=None,
         )
+        mock_adk_service = Mock()
         mock_adk_service.chat = AsyncMock(return_value=mock_response)
+        app.state.adk_service = mock_adk_service
 
         chat_request = {
             "message": "Hello, can you help me with system design?",
@@ -93,9 +96,8 @@ class TestADKAPIIntegration:
         assert call_args.user_id == "test_user"
         assert call_args.session_id == "test_session"
 
-    @patch("app.main.adk_service")
     @pytest.mark.asyncio
-    async def test_chat_endpoint_adk_error(self, mock_adk_service):
+    async def test_chat_endpoint_adk_error(self):
         """Test chat endpoint when ADK returns error"""
         # Mock ADK error response
         mock_response = ChatResponse(
@@ -104,7 +106,9 @@ class TestADKAPIIntegration:
             session_id="test_user_session",
             error="Internal error",
         )
+        mock_adk_service = Mock()
         mock_adk_service.chat = AsyncMock(return_value=mock_response)
+        app.state.adk_service = mock_adk_service
 
         chat_request = {"message": "Hello", "user_id": "test_user"}
 
@@ -117,12 +121,13 @@ class TestADKAPIIntegration:
         assert "technical difficulties" in data["message"]
         assert data["error"] == "Internal error"
 
-    @patch("app.main.adk_service")
     @pytest.mark.asyncio
-    async def test_chat_endpoint_exception(self, mock_adk_service):
+    async def test_chat_endpoint_exception(self):
         """Test chat endpoint with unexpected exception"""
         # Mock ADK service exception
+        mock_adk_service = Mock()
         mock_adk_service.chat = AsyncMock(side_effect=Exception("Unexpected error"))
+        app.state.adk_service = mock_adk_service
 
         chat_request = {"message": "Hello", "user_id": "test_user"}
 
@@ -144,8 +149,7 @@ class TestADKAPIIntegration:
 
         assert response.status_code == 422  # Validation error
 
-    @patch("app.main.adk_service")
-    def test_get_session_info_endpoint(self, mock_adk_service):
+    def test_get_session_info_endpoint(self):
         """Test get session info endpoint"""
         # Mock session info response
         mock_session_info = {
@@ -156,7 +160,9 @@ class TestADKAPIIntegration:
             "architecture": "streaming",
             "note": "Sessions are created per-chat in the streaming architecture",
         }
+        mock_adk_service = Mock()
         mock_adk_service.get_session_info.return_value = mock_session_info
+        app.state.adk_service = mock_adk_service
 
         response = self.client.get("/api/sessions/test_user/test_session")
 
@@ -173,11 +179,12 @@ class TestADKAPIIntegration:
             "test_user", "test_session"
         )
 
-    @patch("app.main.adk_service")
-    def test_get_session_info_endpoint_error(self, mock_adk_service):
+    def test_get_session_info_endpoint_error(self):
         """Test get session info endpoint with error"""
         # Mock service exception
+        mock_adk_service = Mock()
         mock_adk_service.get_session_info.side_effect = Exception("Session error")
+        app.state.adk_service = mock_adk_service
 
         response = self.client.get("/api/sessions/test_user/test_session")
 

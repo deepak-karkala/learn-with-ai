@@ -5,7 +5,7 @@ import ChatPage from '../app/chat/page'
 
 // Mock the ChatInterface component
 jest.mock('../components/ChatInterface', () => ({
-    ChatInterface: ({ messages, onSendMessage, onRequestAssessment, isLoading }: any) => (
+    ChatInterface: ({ messages, onSendMessage, onRequestAssessment, isLoading, isAnalyzing }: any) => (
         <div data-testid="chat-interface">
             <div>Messages: {messages.length}</div>
             <button onClick={() => onSendMessage('test message')}>
@@ -15,6 +15,7 @@ jest.mock('../components/ChatInterface', () => ({
                 Request Assessment
             </button>
             {isLoading && <div>Loading...</div>}
+            {isAnalyzing && <div>Analyzing...</div>}
         </div>
     )
 }))
@@ -277,29 +278,54 @@ describe('ChatPage Error Handling', () => {
     it('handles chat API errors gracefully', async () => {
         const mockAlert = jest.spyOn(window, 'alert').mockImplementation(() => {})
         
-        ;(fetch as jest.Mock).mockResolvedValueOnce({
-            ok: false,
-            status: 500
+        // Clear localStorage to avoid parsing errors
+        Object.defineProperty(window, 'localStorage', {
+            value: {
+                getItem: jest.fn().mockReturnValue(null),
+                setItem: jest.fn(),
+                removeItem: jest.fn()
+            },
+            writable: true
         })
+        
+        // Mock all 3 retry attempts to fail - need to add text() method mock
+        ;(fetch as jest.Mock)
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+                text: async () => 'Internal Server Error'
+            })
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+                text: async () => 'Internal Server Error'
+            })
+            .mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+                text: async () => 'Internal Server Error'
+            })
 
         render(<ChatPage />)
         
         const sendButton = screen.getByText('Send Message')
         fireEvent.click(sendButton)
         
+        // Wait for the error to be processed after all retries
         await waitFor(() => {
             expect(screen.getByText('Messages: 2')).toBeInTheDocument() // User message + error message
-        })
+        }, { timeout: 20000 }) // Very generous timeout for 3 retries with exponential backoff
         
         mockAlert.mockRestore()
-    })
+    }, 25000) // Set test timeout to 25 seconds
 
     it('handles whiteboard upload errors', async () => {
         const mockAlert = jest.spyOn(window, 'alert').mockImplementation(() => {})
         
         ;(fetch as jest.Mock).mockResolvedValueOnce({
             ok: false,
-            status: 413 // Payload too large
+            status: 413, // Payload too large
+            text: async () => 'Payload Too Large'
         })
 
         render(<ChatPage />)
@@ -330,7 +356,8 @@ describe('ChatPage Error Handling', () => {
         // Then mock assessment error response
         ;(fetch as jest.Mock).mockResolvedValueOnce({
             ok: false,
-            status: 400
+            status: 400,
+            text: async () => 'Bad Request'
         })
 
         render(<ChatPage />)

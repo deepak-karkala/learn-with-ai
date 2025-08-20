@@ -22,6 +22,7 @@ export interface Message {
     isStreaming?: boolean
     hasAudio?: boolean
     isLoading?: boolean
+    isTyping?: boolean // For typing indicator
     imageData?: string // Base64 PNG data for images
     metadata?: {
         topic?: string
@@ -42,6 +43,7 @@ interface ChatInterfaceProps {
     onSendMessage: (message: string) => Promise<void>
     onRequestAssessment?: () => void
     isLoading?: boolean
+    isAnalyzing?: boolean
     error?: null
     isTyping?: boolean
     className?: string
@@ -57,6 +59,7 @@ export function ChatInterface({
     onSendMessage,
     onRequestAssessment,
     isLoading = false,
+    isAnalyzing = false,
     error = null,
     isTyping = false,
     className = '',
@@ -151,10 +154,10 @@ export function ChatInterface({
     }, [messages])
 
     useEffect(() => {
-        if (!isLoading && !isTyping) {
+        if (!isLoading && !isAnalyzing && !isTyping) {
             setIsSubmitting(false)
         }
-    }, [isLoading, isTyping])
+    }, [isLoading, isAnalyzing, isTyping])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -406,6 +409,16 @@ export function ChatInterface({
                                                 </div>
                                             )}
                                         </div>
+                                    ) : message.isTyping ? (
+                                        // Animated typing indicator
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="whitespace-nowrap text-sm">{message.content}</span>
+                                            <div className="flex space-x-1 flex-shrink-0">
+                                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                                            </div>
+                                        </div>
                                     ) : (
                                         message.content ? renderMessageContent(message.content) : (message.isStreaming ? '...' : '')
                                     )}
@@ -575,7 +588,7 @@ export function ChatInterface({
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyPress={handleKeyPress}
                                 placeholder="Discuss your approach, ask clarifying questions..."
-                                disabled={isLoading || isSubmitting}
+                                disabled={isLoading || isAnalyzing || isSubmitting}
                                 className={`border-0 focus:ring-0 focus:outline-none text-base p-3 rounded-xl resize-none ${
                                     theme === 'dark' 
                                         ? 'bg-gray-600 text-white placeholder:text-gray-400' 
@@ -593,7 +606,7 @@ export function ChatInterface({
                         />
                         <Button
                             type="submit"
-                            disabled={!inputValue.trim() || isLoading || isSubmitting}
+                            disabled={!inputValue.trim() || isLoading || isAnalyzing || isSubmitting}
                             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-all duration-200 shadow-md hover:shadow-lg"
                             data-testid="send-button"
                         >

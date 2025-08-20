@@ -20,6 +20,7 @@ interface Message {
   isStreaming?: boolean
   hasAudio?: boolean
   imageData?: string // Base64 PNG data for images
+  isTyping?: boolean // For typing indicator
 }
 
 interface AssessmentResult {
@@ -312,53 +313,73 @@ export default function ChatPage() {
     setMessages(prev => [...prev, userMessage])
     setIsLoading(true)
 
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message,
-          session_id: sessionId,
-          user_id: userId
-        }),
-      })
+    // Retry logic for better demo reliability
+    const maxRetries = 3
+    let lastError: Error | null = null
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message,
+            session_id: sessionId,
+            user_id: userId
+          }),
+        })
 
-      if (!response.ok) {
-        throw new Error('Failed to send message')
-      }
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`API Error (${response.status}): ${errorText}`)
+        }
 
-      const data = await response.json()
-      
-      // Update session ID if provided
-      if (data.session_id && data.session_id !== sessionId) {
-        setSessionId(data.session_id)
-        localStorage.setItem(`sessionId:${userId}`, data.session_id)
-      }
+        const data = await response.json()
+        
+        // Update session ID if provided
+        if (data.session_id && data.session_id !== sessionId) {
+          setSessionId(data.session_id)
+          localStorage.setItem(`sessionId:${userId}`, data.session_id)
+        }
 
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: data.message,
-        role: 'assistant',
-        timestamp: new Date()
-      }
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: data.message,
+          role: 'assistant',
+          timestamp: new Date()
+        }
 
-      setMessages(prev => [...prev, aiMessage])
-      loadSessions() // Refresh sessions list
-    } catch (error) {
-      console.error('Failed to send message:', error)
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: 'Sorry, I encountered an error. Please try again.',
-        role: 'assistant',
-        timestamp: new Date()
+        setMessages(prev => [...prev, aiMessage])
+        loadSessions() // Refresh sessions list
+        setIsLoading(false) // Reset loading state on success
+        return // Success - exit retry loop
+        
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error')
+        console.warn(`Chat API attempt ${attempt} failed:`, lastError.message)
+        
+        // If not the last attempt, wait before retry
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000)) // Exponential backoff
+        }
       }
-      setMessages(prev => [...prev, errorMessage])
-      alert('Failed to send message. Please try again.')
-    } finally {
-      setIsLoading(false)
     }
+    
+    // All retries failed
+    console.error('All chat API attempts failed:', lastError)
+    const errorMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      content: lastError?.message.includes('503') 
+        ? 'AI service is temporarily unavailable. Please try again in a moment.'
+        : 'Network error occurred. Please check your connection and try again.',
+      role: 'assistant',
+      timestamp: new Date()
+    }
+
+    setMessages(prev => [...prev, errorMessage])
+    setIsLoading(false)
   }
 
   const handleRequestAssessment = async () => {
@@ -368,6 +389,17 @@ export default function ChatPage() {
     }
 
     setIsLoading(true)
+    
+    // Add typing indicator message
+    const typingIndicatorId = `typing-${Date.now()}`
+    const typingMessage: Message = {
+      id: typingIndicatorId,
+      content: '🤖 Analyzing conversation...',
+      role: 'assistant',
+      timestamp: new Date(),
+      isTyping: true
+    }
+    setMessages(prev => [...prev, typingMessage])
 
     try {
       // Format the conversation history as a string
@@ -411,9 +443,18 @@ export default function ChatPage() {
         timestamp: new Date()
       }
       
-      setMessages(prev => [...prev, assessmentMessage])
+      // Remove typing indicator and add actual assessment
+      setMessages(prev => prev.filter(msg => msg.id !== typingIndicatorId).concat(assessmentMessage))
     } catch (error) {
       console.error('Assessment failed:', error)
+      // Remove typing indicator and show error message
+      const errorMessage: Message = {
+        id: (Date.now() + 3).toString(),
+        content: 'Sorry, I encountered an error while analyzing your conversation. Please try again.',
+        role: 'assistant',
+        timestamp: new Date()
+      }
+      setMessages(prev => prev.filter(msg => msg.id !== typingIndicatorId).concat(errorMessage))
       alert('Assessment failed. Please try again.')
     } finally {
       setIsLoading(false)
@@ -460,6 +501,17 @@ export default function ChatPage() {
 
   const handleWhiteboardAnalyze = async (pngData: string) => {
     setIsAnalyzing(true)
+
+    // Add typing indicator message for whiteboard analysis
+    const typingIndicatorId = `typing-${Date.now()}`
+    const typingMessage: Message = {
+      id: typingIndicatorId,
+      content: '🎨 Analyzing design...',
+      role: 'assistant',
+      timestamp: new Date(),
+      isTyping: true
+    }
+    setMessages(prev => [...prev, typingMessage])
 
     try {
       // First upload the PNG
@@ -508,9 +560,18 @@ export default function ChatPage() {
         timestamp: new Date()
       }
       
-      setMessages(prev => [...prev, analysisMessage])
+      // Remove typing indicator and add actual analysis
+      setMessages(prev => prev.filter(msg => msg.id !== typingIndicatorId).concat(analysisMessage))
     } catch (error) {
       console.error('Analysis failed:', error)
+      // Remove typing indicator and show error message
+      const errorMessage: Message = {
+        id: (Date.now() + 4).toString(),
+        content: 'Sorry, I encountered an error while analyzing your diagram. Please try again.',
+        role: 'assistant',
+        timestamp: new Date()
+      }
+      setMessages(prev => prev.filter(msg => msg.id !== typingIndicatorId).concat(errorMessage))
       alert('Analysis failed. Please try again.')
     } finally {
       setIsAnalyzing(false)
@@ -636,6 +697,7 @@ export default function ChatPage() {
                   onSendMessage={handleSendMessage}
                   onRequestAssessment={handleRequestAssessment}
                   isLoading={isLoading}
+                  isAnalyzing={isAnalyzing}
                   showAssessmentButton={true}
                   onVoiceTranscriptStart={handleVoiceTranscriptStart}
                   onVoiceTranscriptUpdate={handleVoiceTranscriptUpdate}
@@ -832,6 +894,7 @@ export default function ChatPage() {
                       onSendMessage={handleSendMessage}
                       onRequestAssessment={handleRequestAssessment}
                       isLoading={isLoading}
+                      isAnalyzing={isAnalyzing}
                       showAssessmentButton={true}
                       onVoiceTranscriptStart={handleVoiceTranscriptStart}
                       onVoiceTranscriptUpdate={handleVoiceTranscriptUpdate}

@@ -176,6 +176,7 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
     const [history, setHistory] = useState<Array<{ blocks: SystemBlock[], connections: Connection[] }>>([])
     const [redoStack, setRedoStack] = useState<Array<{ blocks: SystemBlock[], connections: Connection[] }>>([])
 
+
     // Simple undo/redo stacks
     const snapshot = useCallback(() => {
         // Avoid capturing an empty baseline so first Undo never wipes the canvas
@@ -200,15 +201,31 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
         if (!canvas) return
 
         const setSizeAndRedraw = () => {
-            const parent = canvas.parentElement
-            const width = parent?.clientWidth || 1000
-            const height = parent?.clientHeight || 600
-            const sizeChanged = canvas.width !== width || canvas.height !== height
-            if (sizeChanged) {
-                canvas.width = width
-                canvas.height = height
-                // Redraw immediately after a size change, since resizing clears the canvas
-                requestAnimationFrame(() => drawRef.current())
+            try {
+                const parent = canvas.parentElement
+                const width = parent?.clientWidth || 1000
+                const height = parent?.clientHeight || 600
+                const sizeChanged = canvas.width !== width || canvas.height !== height
+                
+                // Always ensure minimum size
+                const finalWidth = Math.max(width, 400)
+                const finalHeight = Math.max(height, 300)
+                
+                if (canvas.width !== finalWidth || canvas.height !== finalHeight) {
+                    canvas.width = finalWidth
+                    canvas.height = finalHeight
+                    // Redraw immediately after a size change, since resizing clears the canvas
+                    requestAnimationFrame(() => drawRef.current())
+                }
+            } catch (error) {
+                console.error('Canvas resize error:', error)
+                // Fallback sizing
+                try {
+                    canvas.width = 1000
+                    canvas.height = 600
+                } catch (e) {
+                    console.error('Failed to set fallback canvas size:', e)
+                }
             }
         }
 
@@ -223,13 +240,17 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
         const canvas = canvasRef.current
         if (!canvas) return
 
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
+        try {
+            const ctx = canvas.getContext('2d')
+            if (!ctx) {
+                console.error('Unable to get 2D context from canvas')
+                return
+            }
 
-        // Clear canvas and fill with theme-appropriate background
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        ctx.fillStyle = theme === 'dark' ? '#1f2937' : '#ffffff'  // gray-800 for dark, white for light
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
+            // Clear canvas and fill with theme-appropriate background
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.fillStyle = theme === 'dark' ? '#1f2937' : '#ffffff'  // gray-800 for dark, white for light
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
 
         // Show empty state text when no blocks exist
         if (blocks.length === 0 && connections.length === 0) {
@@ -329,22 +350,29 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
             ctx.textAlign = 'center'
             ctx.fillText(block.label, block.x + block.width / 2, block.y + block.height / 2 + 4)
         })
-    }, [blocks, connections, selectedBlockId, theme])
+        } catch (error) {
+            console.error('Canvas drawing error:', error)
+        }
+    }, [blocks, connections, selectedBlockId, selectedConnectionId, theme, isConnecting, connectionStart, mousePos])
 
-    // Redraw canvas when blocks or connections change, and avoid flicker by batching in rAF
+    // Update drawRef when drawCanvas changes
+    useEffect(() => {
+        drawRef.current = drawCanvas
+    }, [drawCanvas])
+
+    // Separate useEffect for drawing that doesn't depend on drawCanvas directly
+    // This prevents the circular dependency
     useEffect(() => {
         let raf: number | null = null
         const paint = () => {
-            drawCanvas()
-            // keep drawRef in sync with latest drawCanvas so external callbacks are safe
-            drawRef.current = drawCanvas
+            drawRef.current()
             raf = null
         }
         raf = requestAnimationFrame(paint)
         return () => {
             if (raf) cancelAnimationFrame(raf)
         }
-    }, [drawCanvas])
+    }, [blocks, connections, selectedBlockId, selectedConnectionId, theme, isConnecting, connectionStart, mousePos])
 
     // Add new block
     const addBlock = (type: SystemBlock['type'], x: number, y: number) => {
@@ -383,9 +411,10 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
         const canvas = canvasRef.current
         if (!canvas) return
 
-        const rect = canvas.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
+        try {
+            const rect = canvas.getBoundingClientRect()
+            const x = e.clientX - rect.left
+            const y = e.clientY - rect.top
 
         // Check if clicking near a connection line
         const hitThreshold = 8
@@ -453,6 +482,10 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
                 setMousePos({ x: 0, y: 0 }) // Reset mousePos after connection attempt
             }
         }
+        } catch (error) {
+            console.error('Canvas click error:', error)
+            // Don't prevent event propagation - allow other handlers to work
+        }
     }
 
     // Handle mouse down for dragging
@@ -460,9 +493,10 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
         const canvas = canvasRef.current
         if (!canvas) return
 
-        const rect = canvas.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
+        try {
+            const rect = canvas.getBoundingClientRect()
+            const x = e.clientX - rect.left
+            const y = e.clientY - rect.top
 
         const clickedBlock = blocks.find(block =>
             x >= block.x && x <= block.x + block.width &&
@@ -485,6 +519,9 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
             })
             setSelectedBlockId(clickedBlock.id)
         }
+        } catch (error) {
+            console.error('Canvas mouse down error:', error)
+        }
     }
 
     // Handle mouse move for dragging
@@ -492,9 +529,10 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
         const canvas = canvasRef.current
         if (!canvas) return
 
-        const rect = canvas.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
+        try {
+            const rect = canvas.getBoundingClientRect()
+            const x = e.clientX - rect.left
+            const y = e.clientY - rect.top
 
         if (selectedTool === 'connect') {
             if (connectionStart) {
@@ -509,6 +547,9 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
                 ? { ...block, x: x - dragOffset.x, y: y - dragOffset.y }
                 : block
         )))
+        } catch (error) {
+            console.error('Canvas mouse move error:', error)
+        }
     }
 
     // Handle mouse up
@@ -576,8 +617,11 @@ export function WhiteboardCanvas({ onSave, onAnalyze, isAnalyzing, clearTrigger 
         // Add block at center of canvas
         const canvas = canvasRef.current
         if (canvas) {
-            const x = canvas.width / 2
-            const y = canvas.height / 2
+            // Ensure canvas has dimensions before adding block
+            const width = canvas.width || 1000
+            const height = canvas.height || 600
+            const x = width / 2
+            const y = height / 2
             addBlock(type, x, y)
         }
     }

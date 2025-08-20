@@ -305,9 +305,14 @@ You have access to the conversation history through the session state. Use this 
                     self._queue_pool[session_id].close()
                 except Exception as e:
                     logger.warning(f"Error closing unhealthy queue: {e}")
-                del self._queue_pool[session_id]
-                if session_id in self._queue_health:
-                    del self._queue_health[session_id]
+                finally:
+                    # Always remove from pool to prevent resource leaks
+                    try:
+                        del self._queue_pool[session_id]
+                        if session_id in self._queue_health:
+                            del self._queue_health[session_id]
+                    except KeyError:
+                        pass  # Already removed
 
             # Create new queue if pool not full
             if len(self._queue_pool) < self._max_pool_size:
@@ -331,10 +336,6 @@ You have access to the conversation history through the session state. Use this 
                 queue = self._queue_pool[session_id]
                 try:
                     queue.close()  # Close the queue properly
-                    del self._queue_pool[session_id]
-                    # Also clean up health tracking
-                    if session_id in self._queue_health:
-                        del self._queue_health[session_id]
                     logger.debug(
                         f"Cleaned up LiveRequestQueue for session {session_id}"
                     )
@@ -342,6 +343,16 @@ You have access to the conversation history through the session state. Use this 
                     logger.warning(
                         f"Error cleaning up queue for session {session_id}: {e}"
                     )
+                finally:
+                    # Always remove from pool even if close() failed
+                    # to prevent resource leaks
+                    try:
+                        del self._queue_pool[session_id]
+                        # Also clean up health tracking
+                        if session_id in self._queue_health:
+                            del self._queue_health[session_id]
+                    except KeyError:
+                        pass  # Already removed
 
     async def _get_or_create_runner(self, user_id: str) -> InMemoryRunner:
         """Get an existing runner from pool or create a new one for better performance"""
@@ -451,8 +462,18 @@ You have access to the conversation history through the session state. Use this 
                     logger.warning(
                         f"Error cleaning up queue for session {session_id}: {e}"
                     )
+                finally:
+                    # Always remove from pool even if close() failed
+                    # to prevent resource leaks
+                    try:
+                        del self._queue_pool[session_id]
+                        if session_id in self._queue_health:
+                            del self._queue_health[session_id]
+                    except KeyError:
+                        pass  # Already removed
+            # Ensure pools are cleared completely
             self._queue_pool.clear()
-            self._queue_health.clear()  # Clear health tracking
+            self._queue_health.clear()
 
         # Clean up runner pool
         async with self._pool_lock:

@@ -223,4 +223,8 @@ test_setup.py
 .env.local.backup
 .vercel
 
+# Large media files (temporarily excluded until moved to cloud storage)
+content/*/video.mp4
+content/*/audio.m4a
+
 *.png

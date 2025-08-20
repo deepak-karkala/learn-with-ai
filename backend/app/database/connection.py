@@ -7,7 +7,7 @@ import os
 from typing import Generator, Optional
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
@@ -177,7 +177,7 @@ def check_database_connection() -> bool:
     try:
         engine = get_engine()
         with engine.connect() as connection:
-            result = connection.execute("SELECT 1")
+            result = connection.execute(text("SELECT 1"))
             return result.fetchone()[0] == 1
     except Exception as e:
         logger.error(f"Database connection check failed: {e}")

@@ -33,7 +33,18 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
         # Request tracking
         self.active_requests = {}
         
-        logger.info("Performance middleware initialized")
+        # Timeout configuration for different endpoints
+        self.timeout_config = {
+            "/api/assessment/evaluate": 120.0,  # 2 minutes for assessments
+            "/api/whiteboard/analyze": 90.0,    # 1.5 minutes for whiteboard analysis
+            "default": 30.0  # 30 seconds for other endpoints
+        }
+        
+        logger.info("Performance middleware initialized with configurable timeouts")
+    
+    def _get_timeout_for_path(self, path: str) -> float:
+        """Get appropriate timeout for request path."""
+        return self.timeout_config.get(path, self.timeout_config["default"])
     
     async def dispatch(self, request: Request, call_next):
         """Monitor and optimize API request performance."""
@@ -53,10 +64,13 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
             cpu_before = psutil.cpu_percent()
             memory_before = psutil.virtual_memory().percent
             
+            # Get appropriate timeout for this endpoint
+            timeout_seconds = self._get_timeout_for_path(request.url.path)
+            
             # Process request with timeout protection
             response = await asyncio.wait_for(
                 call_next(request),
-                timeout=30.0  # 30 second timeout
+                timeout=timeout_seconds
             )
             
             # Calculate performance metrics
@@ -88,7 +102,8 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
             return response
             
         except asyncio.TimeoutError:
-            logger.error(f"Request timeout: {request.url.path} after 30 seconds")
+            timeout_seconds = self._get_timeout_for_path(request.url.path)
+            logger.error(f"Request timeout: {request.url.path} after {timeout_seconds} seconds")
             await self._record_timeout_event(request, request_id)
             return JSONResponse(
                 status_code=504,

@@ -69,12 +69,8 @@ load_dotenv()
 # Setup logging
 setup_logging(settings)
 
-# ADK service will be initialized properly with dependency injection
-adk_service: Optional[ADKService] = None
-whiteboard_service: Optional[WhiteboardService] = None
-assessment_service: Optional[AssessmentService] = None
-progress_service: Optional[ProgressService] = None
-diagram_service: Optional[DiagramService] = None
+# Global service references are removed - using proper dependency injection via app.state
+# Services will be accessed through FastAPI's app.state to avoid race conditions
 
 # Rate limiting storage
 rate_limit_storage = defaultdict(list)
@@ -164,7 +160,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown
     for proper resource management
     """
-    global adk_service, whiteboard_service, assessment_service, progress_service, diagram_service
+    # Using local variables and app.state for proper dependency injection
     
     # Get logger for this function
     import logging
@@ -200,7 +196,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         
         logger.info("Production services initialized successfully")
         
-        # Initialize core application services
+        # Initialize core application services with local variables
         adk_service = ADKService()
         whiteboard_service = WhiteboardService(adk_service)
         assessment_service = AssessmentService()
@@ -239,14 +235,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
         
     except Exception as e:
-        # Log startup error but don't crash the app
+        # Log startup error and crash the app (fail-fast behavior)
         logger.error(f"Failed to initialize services: {e}")
-        adk_service = None
-        whiteboard_service = None
-        assessment_service = None
-        progress_service = None
-        diagram_service = None
-        yield
+        logger.error("Application cannot start with failed services. Exiting...")
+        # Services are local variables, no global cleanup needed
+        # Re-raise the exception to prevent application startup
+        raise RuntimeError(f"Service initialization failed: {e}") from e
     finally:
         # Shutdown - cleanup resources
         logger.info("Shutting down services...")
@@ -373,8 +367,9 @@ async def health_check() -> dict:
 
 
 @app.get("/api/health")
-async def api_health_check() -> dict:
+async def api_health_check(request: Request) -> dict:
     """API health check endpoint"""
+    adk_service = getattr(request.app.state, 'adk_service', None)
     if adk_service is None:
         adk_status = {"status": "not_initialized"}
     else:
@@ -392,12 +387,13 @@ async def api_health_check() -> dict:
 
 
 @app.post("/api/chat")
-async def chat_with_agent(request: ChatRequest) -> ChatResponse:
+async def chat_with_agent(chat_request: ChatRequest, request: Request) -> ChatResponse:
     """
     Chat with the system design learning agent using ADK.
 
     Args:
-        request: Chat request with message, user_id, and optional session_id
+        chat_request: Chat request with message, user_id, and optional session_id
+        request: FastAPI request object for accessing app state
 
     Returns:
         Chat response from the ADK agent
@@ -406,13 +402,14 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
 
     try:
         # Enhanced validation and sanitization
-        validated_request = await validate_chat_request(request)
+        validated_request = await validate_chat_request(chat_request)
         
         logger.info(
             f"Received ADK chat request from user {validated_request.user_id}"
         )
 
         # Check if ADK service is available
+        adk_service = getattr(request.app.state, 'adk_service', None)
         if adk_service is None:
             raise HTTPException(
                 status_code=503,
@@ -454,13 +451,13 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
         if response.success:
             logger.info(
                 "Successfully processed ADK chat for user %s, session %s",
-                request.user_id,
+                chat_request.user_id,
                 response.session_id,
             )
         else:
             logger.warning(
                 "ADK service returned error for user %s: %s",
-                request.user_id,
+                chat_request.user_id,
                 response.error,
             )
 
@@ -472,7 +469,7 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
     except Exception as e:
         logger.error(
             "Unexpected error in ADK chat endpoint for user %s: %s",
-            request.user_id,
+            chat_request.user_id,
             str(e),
             exc_info=True,
         )
@@ -480,30 +477,32 @@ async def chat_with_agent(request: ChatRequest) -> ChatResponse:
 
 
 @app.post("/api/session/create")
-async def create_session(request: SessionCreateRequest) -> SessionCreateResponse:
+async def create_session(session_request: SessionCreateRequest, request: Request) -> SessionCreateResponse:
     """
     Create a new session with initial state.
     
     Args:
-        request: Session creation request with user_id and initial_state
+        session_request: Session creation request with user_id and initial_state
+        request: FastAPI request object for accessing app state
         
     Returns:
         Session creation response with session_id and state
     """
     try:
+        adk_service = getattr(request.app.state, 'adk_service', None)
         if adk_service is None:
             raise HTTPException(
                 status_code=503,
                 detail="ADK service is not available",
             )
         
-        response = await adk_service.create_session(request)
+        response = await adk_service.create_session(session_request)
         
         # Start analytics session tracking
         if response.success:
             analytics_service = get_analytics_service()
             analytics_service.start_session(
-                user_id=request.user_id,
+                user_id=session_request.user_id,
                 session_id=response.session_id
             )
         
@@ -521,7 +520,7 @@ async def create_session(request: SessionCreateRequest) -> SessionCreateResponse
 
 
 @app.get("/api/session/{user_id}")
-async def get_user_sessions(user_id: str) -> dict:
+async def get_user_sessions(user_id: str, request: Request) -> dict:
     """
     Get all sessions for a user.
     
@@ -532,6 +531,7 @@ async def get_user_sessions(user_id: str) -> dict:
         User sessions information
     """
     try:
+        adk_service = getattr(request.app.state, 'adk_service', None)
         if adk_service is None:
             raise HTTPException(
                 status_code=503,
@@ -551,7 +551,7 @@ async def get_user_sessions(user_id: str) -> dict:
 
 
 @app.get("/api/sessions/{user_id}/{session_id}")
-async def get_session_info(user_id: str, session_id: str) -> dict:
+async def get_session_info(user_id: str, session_id: str, request: Request) -> dict:
     """
     Get information about a specific user session.
 
@@ -563,6 +563,7 @@ async def get_session_info(user_id: str, session_id: str) -> dict:
         Session information
     """
     try:
+        adk_service = getattr(request.app.state, 'adk_service', None)
         if adk_service is None:
             raise HTTPException(
                 status_code=503,
@@ -579,24 +580,26 @@ async def get_session_info(user_id: str, session_id: str) -> dict:
 
 # Whiteboard API endpoints
 @app.post("/api/whiteboard/upload")
-async def upload_whiteboard_png(request: PNGUploadRequest) -> PNGUploadResponse:
+async def upload_whiteboard_png(upload_request: PNGUploadRequest, request: Request) -> PNGUploadResponse:
     """
     Upload PNG data from whiteboard canvas.
     
     Args:
-        request: PNG upload request with base64 data
+        upload_request: PNG upload request with base64 data
+        request: FastAPI request object for accessing app state
         
     Returns:
         PNG upload response with artifact ID
     """
     try:
+        whiteboard_service = getattr(request.app.state, 'whiteboard_service', None)
         if whiteboard_service is None:
             raise HTTPException(
                 status_code=503,
                 detail="Whiteboard service is not available",
             )
         
-        response = await whiteboard_service.upload_png(request)
+        response = await whiteboard_service.upload_png(upload_request)
         return response
         
     except Exception as e:
@@ -612,25 +615,27 @@ async def upload_whiteboard_png(request: PNGUploadRequest) -> PNGUploadResponse:
 
 @app.post("/api/whiteboard/analyze")
 async def analyze_whiteboard(
-    request: WhiteboardAnalysisRequest
+    analysis_request: WhiteboardAnalysisRequest, request: Request
 ) -> WhiteboardAnalysisResponse:
     """
     Analyze whiteboard PNG using multimodal LLM.
     
     Args:
-        request: Analysis request with artifact ID
+        analysis_request: Analysis request with artifact ID
+        request: FastAPI request object for accessing app state
         
     Returns:
         Analysis response with feedback and suggestions
     """
     try:
+        whiteboard_service = getattr(request.app.state, 'whiteboard_service', None)
         if whiteboard_service is None:
             raise HTTPException(
                 status_code=503,
                 detail="Whiteboard service is not available",
             )
         
-        response = await whiteboard_service.analyze_whiteboard(request)
+        response = await whiteboard_service.analyze_whiteboard(analysis_request)
         return response
         
     except Exception as e:
@@ -646,7 +651,7 @@ async def analyze_whiteboard(
 
 # Assessment API endpoints
 @app.post("/api/assessment/evaluate", response_model=AssessmentResponse)
-async def evaluate_assessment(request: AssessmentRequest) -> AssessmentResponse:
+async def evaluate_assessment(assessment_request: AssessmentRequest, request: Request) -> AssessmentResponse:
     """
     Evaluate a user's system design performance using LLM judge
     
@@ -659,13 +664,14 @@ async def evaluate_assessment(request: AssessmentRequest) -> AssessmentResponse:
     - Communication & Thought Process
     """
     try:
+        assessment_service = getattr(request.app.state, 'assessment_service', None)
         if assessment_service is None:
             raise HTTPException(
                 status_code=503,
                 detail="Assessment service is not available",
             )
         
-        assessment = await assessment_service.evaluate_assessment(request)
+        assessment = await assessment_service.evaluate_assessment(assessment_request)
         return assessment
     except Exception as e:
         logger = logging.getLogger(__name__)
@@ -681,6 +687,7 @@ async def evaluate_assessment(request: AssessmentRequest) -> AssessmentResponse:
 @app.get("/api/assessment/history/{user_id}", response_model=AssessmentHistoryResponse)
 async def get_assessment_history(
     user_id: str,
+    request: Request,
     limit: int = 50,
     offset: int = 0,
     assessment_type: Optional[str] = None

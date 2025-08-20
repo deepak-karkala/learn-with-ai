@@ -305,10 +305,9 @@ class TestWhiteboardAPI:
         test_adk_service = ADKService()
         test_whiteboard_service = WhiteboardService(test_adk_service)
         
-        # Override the global services in the app
-        import app.main
-        app.main.whiteboard_service = test_whiteboard_service
-        app.main.adk_service = test_adk_service
+        # Set services in app state (this is how the API endpoints access them)
+        test_app.state.whiteboard_service = test_whiteboard_service
+        test_app.state.adk_service = test_adk_service
         
         return TestClient(test_app)
     

@@ -388,7 +388,6 @@ export function ChatInterface({
                                         return message.type === 'image' && message.imageData
                                     })() ? (
                                         <div className="space-y-2">
-                                            {console.log('Rendering image for message:', message.id, 'src length:', message.imageData?.length)}
                                             <img 
                                                 src={message.imageData} 
                                                 alt="Saved whiteboard design"

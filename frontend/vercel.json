@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://backend-n1qjcmkwf-dkarkala01-gmailcoms-projects.vercel.app/api/$1"
+      "destination": "https://backend-nlrqcn4zl-dkarkala01-gmailcoms-projects.vercel.app/api/$1"
     }
   ],
   "headers": [

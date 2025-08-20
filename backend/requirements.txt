@@ -10,19 +10,19 @@ google-genai>=1.17.0
 google-adk>=1.4.2
 openai>=1.0.0
 
-# Production services dependencies
+# Production services dependencies  
 redis>=5.0.0
 psutil>=5.9.0
 sqlalchemy>=2.0.0
-psycopg2-binary>=2.9.0
-alembic>=1.13.0
+# psycopg2-binary>=2.9.0    # Temporarily disabled - will use SQLite for MVP
+# alembic>=1.13.0           # Database migrations - not needed for MVP
 
 # Monitoring and observability
 opik>=0.2.0
 
-# Cloud services
-google-cloud-storage>=2.10.0
-google-cloud-aiplatform>=1.38.0
+# Cloud services (temporarily disabled to prevent OOM - only needed for memory service)
+# google-cloud-storage>=2.10.0        # Only needed for storage service
+# google-cloud-aiplatform>=1.38.0     # Only needed for memory service RAG
 
 # Security and authentication
 bcrypt>=4.1.0
@@ -30,10 +30,10 @@ pyjwt>=2.8.0
 cryptography>=41.0.0
 python-jose[cryptography]>=3.3.0
 
-# Additional utilities
-sentence-transformers>=2.2.0
-numpy>=1.24.0
-scikit-learn>=1.3.0
+# Additional utilities (ML packages removed to prevent OOM during deployment)
+# sentence-transformers>=2.2.0  # Only needed for advanced memory/RAG features
+# numpy>=1.24.0                  # Only needed for memory service embeddings  
+# scikit-learn>=1.3.0           # Only needed for TF-IDF in memory service
 
 # Performance and load testing
 aiohttp>=3.9.0

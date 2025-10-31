@@ -1,0 +1,40 @@
+# Exclude unnecessary files from Vercel deployment
+.git
+.gitignore
+.env*
+!.env.production
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov
+dist
+build
+*.egg-info
+.DS_Store
+node_modules
+tests
+test_*.py
+*_test.py
+conftest.py
+.flake8
+README*.md
+*.md
+docs
+logs
+.github
+.vscode
+.idea
+requirements-dev.txt
+tox.ini
+Makefile
+
+# uv lock file - let Vercel generate fresh dependencies
+# uv.lock is regenerated from requirements.txt during build
+
+# pyproject.toml causes editable install issues on Vercel
+# Use requirements.txt instead for Vercel deployments
+pyproject.toml

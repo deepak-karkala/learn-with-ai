@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://backend-nlrqcn4zl-dkarkala01-gmailcoms-projects.vercel.app/api/$1"
+      "destination": "${NEXT_PUBLIC_BACKEND_URL}/api/$1"
     }
   ],
   "headers": [
@@ -15,7 +15,7 @@
       "headers": [
         {
           "key": "X-Frame-Options",
-          "value": "DENY"
+          "value": "SAMEORIGIN"
         },
         {
           "key": "X-Content-Type-Options",
@@ -24,6 +24,10 @@
         {
           "key": "X-XSS-Protection",
           "value": "1; mode=block"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
         }
       ]
     }

@@ -19,16 +19,15 @@ const nextConfig = {
     return config
   },
   async rewrites() {
-    // In development, proxy API calls to local FastAPI backend
-    if (process.env.NODE_ENV === 'development') {
-      return [
-        {
-          source: '/api/:path*',
-          destination: 'http://localhost:8000/api/:path*',
-        },
-      ]
-    }
-    return []
+    // Determine backend URL based on environment
+    let backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
+      },
+    ]
   },
 }
 

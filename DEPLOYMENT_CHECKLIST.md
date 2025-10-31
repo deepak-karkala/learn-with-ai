@@ -79,19 +79,27 @@ This is the best approach for your stack!
 4. Select the `backend` directory (if monorepo) or root
 5. Railway auto-detects Python and deploys
 
-#### C. Set Environment Variables in Railway
+#### C. ⚠️ **CRITICAL: Set Environment Variables in Railway**
 
-In Railway dashboard → Variables:
+**The app will crash if `GOOGLE_API_KEY` is not set!**
+
+In Railway dashboard → Variables tab:
 
 ```
-GOOGLE_API_KEY=<your-google-api-key>
+GOOGLE_API_KEY=<your-actual-google-api-key>  ⚠️ REQUIRED - App won't start without this!
 GOOGLE_GENAI_USE_VERTEXAI=False
 DEBUG=False
 LOG_LEVEL=INFO
 ENVIRONMENT=production
 ```
 
-Click "Add" for each variable.
+**How to get Google API Key:**
+1. Go to [https://makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey)
+2. Click "Create API Key"
+3. Copy the key
+4. Paste in Railway Variables as `GOOGLE_API_KEY`
+
+Railway will automatically redeploy when you add variables.
 
 #### D. Get Railway URL
 

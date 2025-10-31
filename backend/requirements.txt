@@ -26,8 +26,11 @@ sqlalchemy>=2.0.0
 # Networking
 aiohttp>=3.9.0
 
+# openai
+openai>=1.0.0               # 12MB - Use google-genai instead
+
+
 # REMOVED - Too large for serverless deployment (250MB limit):
-# openai>=1.0.0               # 12MB - Use google-genai instead
 # opik>=0.2.0                 # 11MB - Monitoring; use basic logging
 # nltk>=3.8                   # Often brings numpy (100MB+)
 

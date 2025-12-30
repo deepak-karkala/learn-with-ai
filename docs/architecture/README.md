@@ -262,8 +262,6 @@ These documents were generated from a comprehensive codebase analysis:
 - Line numbers refer to the implementation at analysis time
 - Update these docs when making significant architectural changes
 
-**Last Updated:** 2024-10-28
-
 ---
 
 ## Related Documentation

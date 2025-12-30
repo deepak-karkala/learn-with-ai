@@ -2,6 +2,7 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.34.0
 pydantic>=2.7.2
 pydantic-settings>=2.5.2
+email-validator>=2.0.0
 python-dotenv==1.0.0
 python-multipart>=0.0.9
 httpx>=0.28.1
@@ -17,17 +18,13 @@ python-jose[cryptography]>=3.3.0
 # Voice processing
 wordsegment>=1.0.0
 
-# Production services dependencies (for Railway/other platforms)
-# These are optional for serverless but useful for Railway
-redis>=5.0.0
-psutil>=5.9.0
-sqlalchemy>=2.0.0
+# Optional for production (commented out for MVP demo):
+# redis>=5.0.0                     # Only if using Redis for caching
+# sqlalchemy>=2.0.0               # Only if using PostgreSQL
+# psycopg2-binary>=2.9.0          # Only if using PostgreSQL
 
 # Networking
 aiohttp>=3.9.0
-
-# openai
-openai>=1.0.0               # 12MB - Use google-genai instead
 
 
 # REMOVED - Too large for serverless deployment (250MB limit):

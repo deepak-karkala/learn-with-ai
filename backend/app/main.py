@@ -161,10 +161,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     for proper resource management
     """
     # Using local variables and app.state for proper dependency injection
-    
+
     # Get logger for this function
     import logging
     logger = logging.getLogger(__name__)
+
+    # Initialize service variables (to avoid UnboundLocalError in finally block)
+    adk_service = None
+    diagram_service = None
 
     # Startup
     try:

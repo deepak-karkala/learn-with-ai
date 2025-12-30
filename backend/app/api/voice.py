@@ -223,37 +223,36 @@ async def voice_stream(websocket: WebSocket):
         
         try:
             async for event in live_events:
-                # Debug: Only log events with assistant content for now
+                # Debug: Log all events to understand the structure
                 author = getattr(event, 'author', None)
-                has_assistant_content = (hasattr(event, 'content') and event.content and 
-                                       hasattr(event.content, 'parts') and 
-                                       str(author).lower() == 'model')
-                
-                if has_assistant_content:
-                    logger.info(f"[ASSISTANT EVENT] Author: {author}, turn_complete: {getattr(event, 'turn_complete', None)}, interrupted: {getattr(event, 'interrupted', None)}")
-                
+                has_content = hasattr(event, 'content') and event.content and hasattr(event.content, 'parts')
+                turn_complete = getattr(event, 'turn_complete', None)
+
+                logger.info(f"[EVENT] Author: {author}, has_content: {has_content}, turn_complete: {turn_complete}")
+
                 # Check author field to distinguish user vs assistant
-                author = getattr(event, 'author', None)
-                is_user_event = (hasattr(event, 'author') and event.author and 
+                is_user_event = (hasattr(event, 'author') and event.author and
                                ('user' in str(event.author).lower() or 'input' in str(event.author).lower()))
                 
-                # Handle ADK event content structure  
+                # Handle ADK event content structure
                 if hasattr(event, "content") and event.content and hasattr(event.content, "parts"):
-                    for part in event.content.parts:
+                    logger.info(f"[EVENT PARTS] Processing {len(event.content.parts)} parts, is_user_event: {is_user_event}")
+                    for i, part in enumerate(event.content.parts):
+                        logger.info(f"[PART {i}] Type check - has_text: {hasattr(part, 'text')}, has_inline_data: {hasattr(part, 'inline_data')}")
                         # Handle text parts
                         if hasattr(part, "text") and part.text:
                             # Determine role based on event analysis
                             role = "user" if is_user_event else "assistant"
-                            
+
                             # Accumulate text chunks without sending to frontend immediately
                             text_chunk = part.text.strip()
                             if role == "user":
                                 accumulated_user_text += text_chunk
-                                logger.info(f"User text accumulated: '{accumulated_user_text}'")
+                                logger.info(f"[TEXT EVENT] User text chunk: '{text_chunk}', total accumulated: '{accumulated_user_text}'")
                             else:
                                 # Accumulate assistant text but don't send yet - wait for turn completion
                                 accumulated_assistant_text += text_chunk
-                                logger.info(f"Assistant text accumulated: '{accumulated_assistant_text}'")
+                                logger.info(f"[TEXT EVENT] Assistant text chunk: '{text_chunk}', total accumulated: '{accumulated_assistant_text}'")
                         
                         # Handle audio parts  
                         elif hasattr(part, "inline_data") and part.inline_data:
@@ -269,21 +268,40 @@ async def voice_stream(websocket: WebSocket):
                                     await websocket.send_text(json.dumps(message))
                                     logger.info(f"Sent audio: {len(audio_data)} bytes")
                 
-                # Check for additional transcription fields
+                # Check for additional transcription fields (user input audio transcription)
                 user_transcription_fields = ['transcription', 'input_transcription', 'user_transcription', 'input_text']
                 for field_name in user_transcription_fields:
                     if hasattr(event, field_name):
                         field_value = getattr(event, field_name)
                         if field_value:
-                            accumulated_user_text += str(field_value).strip()
+                            # Only append if it's a string; extract text attribute if it's an object
+                            if isinstance(field_value, str):
+                                accumulated_user_text += field_value.strip()
+                            elif hasattr(field_value, 'text'):
+                                accumulated_user_text += field_value.text.strip()
+                            # Skip non-string, non-text-object values to prevent repr() issues
+
+                # Check for assistant audio transcription fields (output audio transcription)
+                assistant_transcription_fields = ['output_audio_transcription', 'output_transcription', 'assistant_transcription']
+                for field_name in assistant_transcription_fields:
+                    if hasattr(event, field_name):
+                        field_value = getattr(event, field_name)
+                        if field_value:
+                            # Extract text from transcription object
+                            if isinstance(field_value, str):
+                                accumulated_assistant_text += field_value.strip()
+                            elif hasattr(field_value, 'text'):
+                                accumulated_assistant_text += field_value.text.strip()
+                            logger.info(f"[ASSISTANT TRANSCRIPTION] Found {field_name}, accumulated: '{accumulated_assistant_text}'")
                 
-                # Send turn completion signal and apply word segmentation to complete text
+                # Send turn completion signal and apply word segmentation to user text only
                 if hasattr(event, 'turn_complete') and event.turn_complete:
-                    logger.info(f"[TURN COMPLETE] Processing turn completion with user: '{accumulated_user_text}', assistant: '{accumulated_assistant_text}'")
-                    # Process complete accumulated text with word segmentation
+                    logger.info(f"[TURN COMPLETE] Processing turn completion. User text: '{accumulated_user_text}', Assistant text: '{accumulated_assistant_text}'")
+                    # Process complete accumulated user text with word segmentation (needed for speech-to-text)
                     if accumulated_user_text:
                         segmented_user_text = segment_text_without_spaces(accumulated_user_text)
-                        
+                        logger.info(f"[TURN COMPLETE] Sending user transcription: '{segmented_user_text}'")
+
                         # Send segmented complete user text
                         complete_message = {
                             "mime_type": "text/plain",
@@ -293,21 +311,27 @@ async def voice_stream(websocket: WebSocket):
                         }
                         await websocket.send_text(json.dumps(complete_message))
                         accumulated_user_text = ""  # Reset for next turn
-                    
+                    else:
+                        logger.info("[TURN COMPLETE] No user text accumulated")
+
                     if accumulated_assistant_text:
-                        segmented_assistant_text = segment_text_without_spaces(accumulated_assistant_text)
-                        
-                        # Send segmented complete assistant text
+                        # Assistant text already has proper spacing from the LLM - don't segment it
+                        logger.info(f"[TURN COMPLETE] Sending assistant transcription: '{accumulated_assistant_text}'")
+
+                        # Send complete assistant text as-is (already properly spaced from LLM)
                         complete_message = {
                             "mime_type": "text/plain",
-                            "role": "assistant", 
-                            "data": segmented_assistant_text,
+                            "role": "assistant",
+                            "data": accumulated_assistant_text,
                             "complete": True
                         }
                         await websocket.send_text(json.dumps(complete_message))
                         accumulated_assistant_text = ""  # Reset for next turn
-                    
+                    else:
+                        logger.info("[TURN COMPLETE] No assistant text accumulated")
+
                     # Send turn completion signal
+                    logger.info("[TURN COMPLETE] Sending turn_complete signal")
                     await websocket.send_text(json.dumps({"turn_complete": True}))
 
         except Exception as e:

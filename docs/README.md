@@ -2,13 +2,19 @@
 
 This directory contains comprehensive documentation for the AI System Design Learning Platform.
 
-## 📚 **Development & Workflow**
+## 📖 **Architecture Documentation**
 
-### **[development-workflow.md](./development-workflow.md)**
-Complete development workflow guide with visual diagrams, quality gates, and step-by-step processes from feature development to production deployment.
+### **[01_system_overview.md](./01_system_overview.md)**
+High-level system architecture, key components, and technology stack overview for the learning platform.
 
-### **[workflow-optimization.md](./workflow-optimization.md)**
-Analysis of CI/CD workflow optimizations, including the elimination of redundant testing and performance improvements.
+### **[02_technical_specifications.md](./02_technical_specifications.md)**
+Detailed technical specifications covering API endpoints, data models, authentication, and integration patterns.
+
+### **[03_architecture_deep_dive.md](./03_architecture_deep_dive.md)**
+In-depth exploration of architectural decisions, design patterns, and system components.
+
+### **[04_operations_production.md](./04_operations_production.md)**
+Production operations guide including deployment, monitoring, scaling, and maintenance procedures.
 
 ## 🤖 **Code Review & Quality**
 
@@ -17,34 +23,41 @@ Comprehensive guide for Claude Code integration as a Unix-style utility for auto
 
 ## 🚀 **Deployment & Infrastructure**
 
-### **[vercel-preview-setup.md](./vercel-preview-setup.md)**
-Detailed setup guide for Vercel preview deployments, including environment configuration, GitHub secrets, and staging workflows.
+### **[vercel_deployment_guide.md](./vercel_deployment_guide.md)**
+Complete guide for deploying the application to Vercel, including environment configuration and deployment workflows.
 
-### **[staging-setup-checklist.md](./staging-setup-checklist.md)**
-Step-by-step checklist for verifying and setting up staging deployment infrastructure.
-
-## 📝 **Project History**
+## 📝 **Project History & Planning**
 
 ### **[implementation-changelog.md](./implementation-changelog.md)**
 Detailed changelog of implementation progress, technical decisions, and feature development history.
+
+### **[revenue_model.md](./revenue_model.md)**
+Business model, pricing strategy, and revenue projections for the learning platform.
+
+## 🧪 **Testing**
+
+### **[testing_guide.md](./testing_guide.md)**
+Comprehensive testing guide covering unit tests, integration tests, and end-to-end testing strategies.
 
 ---
 
 ## 🗂️ **Quick Navigation**
 
 ### **For Developers:**
-- Setting up development environment → [development-workflow.md](./development-workflow.md)
-- Understanding code review process → [claude-code-review.md](./claude-code-review.md)
-- Workflow optimization rationale → [workflow-optimization.md](./workflow-optimization.md)
+- System architecture overview → [01_system_overview.md](./01_system_overview.md)
+- Technical specifications → [02_technical_specifications.md](./02_technical_specifications.md)
+- Architecture deep dive → [03_architecture_deep_dive.md](./03_architecture_deep_dive.md)
+- Code review process → [claude-code-review.md](./claude-code-review.md)
+- Testing guide → [testing_guide.md](./testing_guide.md)
 
 ### **For DevOps:**
-- Staging deployment setup → [vercel-preview-setup.md](./vercel-preview-setup.md)
-- Deployment checklist → [staging-setup-checklist.md](./staging-setup-checklist.md)
+- Production operations → [04_operations_production.md](./04_operations_production.md)
+- Vercel deployment → [vercel_deployment_guide.md](./vercel_deployment_guide.md)
 
 ### **For Project Management:**
 - Implementation history → [implementation-changelog.md](./implementation-changelog.md)
-- Workflow efficiency analysis → [workflow-optimization.md](./workflow-optimization.md)
+- Revenue model → [revenue_model.md](./revenue_model.md)
 
 ---
 
-**Note:** All documentation follows lowercase naming conventions and is organized in the `docs/` directory for consistency with modern project standards.
+**Note:** Development notes and work-in-progress documents are maintained in the `docs/dev_notes/` subdirectory.

@@ -3,12 +3,6 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "${NEXT_PUBLIC_BACKEND_URL}/api/$1"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",

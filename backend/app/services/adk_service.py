@@ -14,6 +14,7 @@ from weakref import WeakValueDictionary
 from google.adk.agents import Agent, LiveRequestQueue
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.runners import InMemoryRunner
+from google.adk.errors.already_exists_error import AlreadyExistsError
 
 # from google.adk.sessions import InMemorySessionService  # Not directly used
 from google.genai.types import (
@@ -368,13 +369,13 @@ You have access to the conversation history through the session state. Use this 
             # Create new runner if pool not full
             if len(self._runner_pool) < self._max_pool_size:
                 logger.debug(f"Creating new runner for user {user_id}")
-                runner = InMemoryRunner(agent=self.agent)
+                runner = InMemoryRunner(agent=self.agent, app_name=self.app_name)
                 self._runner_pool[user_id] = runner
                 return runner
 
             # Pool is full, create temporary runner (not pooled)
             logger.debug(f"Pool full, creating temporary runner for user {user_id}")
-            return InMemoryRunner(agent=self.agent)
+            return InMemoryRunner(agent=self.agent, app_name=self.app_name)
 
     async def _cleanup_runner(self, user_id: str) -> None:
         """Clean up runner resources (optional, for explicit cleanup)"""
@@ -803,14 +804,40 @@ You have access to the conversation history through the session state. Use this 
                     # Save new session to persistent storage
                     await self._save_session_to_persistence(session_id, request.user_id, session_state)
 
-            # Create session using the runner's session service
-            session = await runner.session_service.create_session(
-                app_name=self.app_name,
-                user_id=request.user_id,
-                state=session_state,
-                session_id=session_id,
-            )
-            logger.info(f"Created ADK session {session_id}")
+            # Get or create session using the runner's session service
+            session = None
+            try:
+                # Try to get existing session first
+                session = await runner.session_service.get_session(
+                    app_name=runner.app_name,
+                    user_id=request.user_id,
+                    session_id=session_id,
+                )
+            except Exception as get_error:
+                logger.debug(
+                    f"Failed to retrieve ADK session {session_id}: {get_error}"
+                )
+
+            if session:
+                logger.info(f"Retrieved existing ADK session {session_id}")
+            else:
+                try:
+                    # Session doesn't exist, create it
+                    session = await runner.session_service.create_session(
+                        app_name=runner.app_name,
+                        user_id=request.user_id,
+                        state=session_state,
+                        session_id=session_id,
+                    )
+                    logger.info(f"Created new ADK session {session_id}")
+                except AlreadyExistsError:
+                    # Race or stale cache: session exists, so load it
+                    session = await runner.session_service.get_session(
+                        app_name=runner.app_name,
+                        user_id=request.user_id,
+                        session_id=session_id,
+                    )
+                    logger.info(f"Retrieved existing ADK session {session_id}")
 
             # Get reusable run configuration for better performance
             run_config = self._get_run_config()
@@ -820,7 +847,8 @@ You have access to the conversation history through the session state. Use this 
 
             # Start the live agent session using proper streaming pattern
             live_events = runner.run_live(
-                session=session,
+                user_id=request.user_id,
+                session_id=session_id,
                 live_request_queue=live_request_queue,
                 run_config=run_config,
             )

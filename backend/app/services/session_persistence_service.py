@@ -523,17 +523,22 @@ class SessionPersistenceService:
         try:
             if not self._session_service:
                 return None
-            
-            # Create a session for artifact operations
-            session_context = await self._session_service.create_session(
-                app="session_persistence",
-                user=user_id,
-                session_id=session_id,
-                state={}
-            )
-            
+
+            # Get or create a session for artifact operations
+            try:
+                # Try to get existing session first
+                session_context = await self._session_service.get_session(session_id=session_id)
+            except Exception:
+                # Session doesn't exist, create it (without 'app' parameter - not supported by InMemorySessionService)
+                session_context = await self._session_service.create_session(
+                    app_name="session_persistence",
+                    user_id=user_id,
+                    session_id=session_id,
+                    state={}
+                )
+
             return session_context
-            
+
         except Exception as e:
             logger.error(f"Failed to create session context for {user_id}/{session_id}: {e}")
             return None

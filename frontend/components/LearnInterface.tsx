@@ -7,12 +7,8 @@ import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
 import { ScrollArea } from "../components/ui/scroll-area"
-import { VideoPlayer } from "./VideoPlayer"
-import { AudioPlayer } from "./AudioPlayer"
 import { 
   BookOpen, 
-  Video, 
-  Volume2, 
   Play, 
   Pause,
   ArrowLeft,
@@ -31,8 +27,6 @@ interface LearningModule {
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced'
   author: string
   rating: number
-  hasVideo: boolean
-  hasAudio: boolean
   hasText: boolean
 }
 
@@ -50,8 +44,6 @@ const learningModules: LearningModule[] = [
     difficulty: 'Intermediate',
     author: 'System Design Expert',
     rating: 4.8,
-    hasVideo: true,
-    hasAudio: true,
     hasText: true
   },
   {
@@ -62,8 +54,6 @@ const learningModules: LearningModule[] = [
     difficulty: 'Beginner',
     author: 'System Design Expert',
     rating: 4.7,
-    hasVideo: true,
-    hasAudio: true,
     hasText: true
   },
   {
@@ -74,18 +64,14 @@ const learningModules: LearningModule[] = [
     difficulty: 'Advanced',
     author: 'System Design Expert',
     rating: 4.9,
-    hasVideo: true,
-    hasAudio: true,
     hasText: true
   }
 ]
 
 export function LearnInterface({ selectedModule, onModuleSelect }: LearnInterfaceProps) {
   const { theme } = useTheme()
-  const [activeMode, setActiveMode] = useState<'text' | 'video' | 'audio'>('text')
+  const [activeMode, setActiveMode] = useState<'text'>('text')
   const [moduleContent, setModuleContent] = useState<string>('')
-  const [videoSrc, setVideoSrc] = useState<string>('')
-  const [audioSrc, setAudioSrc] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
   const [contentError, setContentError] = useState<string>('')
 
@@ -93,13 +79,7 @@ export function LearnInterface({ selectedModule, onModuleSelect }: LearnInterfac
 
   useEffect(() => {
     if (selectedModule) {
-      if (activeMode === 'text') {
-        loadModuleContent(selectedModule)
-      } else if (activeMode === 'video') {
-        loadVideoContent(selectedModule)
-      } else if (activeMode === 'audio') {
-        loadAudioContent(selectedModule)
-      }
+      loadModuleContent(selectedModule)
     }
   }, [selectedModule, activeMode])
 
@@ -129,90 +109,6 @@ export function LearnInterface({ selectedModule, onModuleSelect }: LearnInterfac
     } catch (error) {
       console.error('Failed to load content:', error)
       setModuleContent('Content not available.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const loadVideoContent = async (moduleId: string) => {
-    setIsLoading(true)
-    setContentError('')
-    try {
-      // Try to load video from API first
-      const response = await fetch(`/api/content/${moduleId}/video`)
-      if (response.ok) {
-        const blob = await response.blob()
-        const videoUrl = URL.createObjectURL(blob)
-        setVideoSrc(videoUrl)
-      } else {
-        // Fallback to direct content loading
-        const videoExtensions = ['.mp4', '.webm', '.mov', '.avi']
-        let found = false
-        
-        for (const ext of videoExtensions) {
-          try {
-            const directResponse = await fetch(`/content/${moduleId}/video${ext}`)
-            if (directResponse.ok) {
-              const blob = await directResponse.blob()
-              const videoUrl = URL.createObjectURL(blob)
-              setVideoSrc(videoUrl)
-              found = true
-              break
-            }
-          } catch (error) {
-            // Continue to next extension
-          }
-        }
-        
-        if (!found) {
-          setContentError(`Video content not found for ${moduleId}`)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load video:', error)
-      setContentError(`Failed to load video content for ${moduleId}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const loadAudioContent = async (moduleId: string) => {
-    setIsLoading(true)
-    setContentError('')
-    try {
-      // Try to load audio from API first
-      const response = await fetch(`/api/content/${moduleId}/audio`)
-      if (response.ok) {
-        const blob = await response.blob()
-        const audioUrl = URL.createObjectURL(blob)
-        setAudioSrc(audioUrl)
-      } else {
-        // Fallback to direct content loading
-        const audioExtensions = ['.mp3', '.wav', '.ogg', '.m4a']
-        let found = false
-        
-        for (const ext of audioExtensions) {
-          try {
-            const directResponse = await fetch(`/content/${moduleId}/audio${ext}`)
-            if (directResponse.ok) {
-              const blob = await directResponse.blob()
-              const audioUrl = URL.createObjectURL(blob)
-              setAudioSrc(audioUrl)
-              found = true
-              break
-            }
-          } catch (error) {
-            // Continue to next extension
-          }
-        }
-        
-        if (!found) {
-          setContentError(`Audio content not found for ${moduleId}`)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load audio:', error)
-      setContentError(`Failed to load audio content for ${moduleId}`)
     } finally {
       setIsLoading(false)
     }
@@ -286,8 +182,6 @@ export function LearnInterface({ selectedModule, onModuleSelect }: LearnInterfac
                   
                   <div className="flex items-center gap-1">
                     {module.hasText && <FileText className="h-4 w-4 text-blue-500" />}
-                    {module.hasVideo && <Video className="h-4 w-4 text-red-500" />}
-                    {module.hasAudio && <Volume2 className="h-4 w-4 text-green-500" />}
                   </div>
                 </div>
               </CardContent>
@@ -339,26 +233,6 @@ export function LearnInterface({ selectedModule, onModuleSelect }: LearnInterfac
           >
             <BookOpen className="h-4 w-4" />
             Notes
-          </Button>
-          <Button
-            variant={activeMode === 'video' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setActiveMode('video')}
-            className="flex items-center gap-2"
-            disabled={!currentModule.hasVideo}
-          >
-            <Video className="h-4 w-4" />
-            Video
-          </Button>
-          <Button
-            variant={activeMode === 'audio' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setActiveMode('audio')}
-            className="flex items-center gap-2"
-            disabled={!currentModule.hasAudio}
-          >
-            <Volume2 className="h-4 w-4" />
-            Audio
           </Button>
         </div>
 
@@ -459,73 +333,6 @@ export function LearnInterface({ selectedModule, onModuleSelect }: LearnInterfac
               </ScrollArea>
             )}
 
-            {activeMode === 'video' && (
-              <div className="h-full">
-                {isLoading ? (
-                  <div className="flex items-center justify-center h-64">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  </div>
-                ) : videoSrc ? (
-                  <VideoPlayer
-                    src={videoSrc}
-                    title={`${currentModule.title} - Video Lesson`}
-                    onError={(error) => setContentError(error)}
-                  />
-                ) : (
-                  <div className="text-center py-16">
-                    <Video className={`h-16 w-16 mx-auto mb-4 ${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`} />
-                    <h3 className={`text-base font-medium mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                      Video Coming Soon
-                    </h3>
-                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Video content for {currentModule.title} will be available soon.
-                    </p>
-                    {contentError && (
-                      <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>
-                        {contentError}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeMode === 'audio' && (
-              <div className="h-full">
-                {isLoading ? (
-                  <div className="flex items-center justify-center h-64">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  </div>
-                ) : audioSrc ? (
-                  <AudioPlayer
-                    src={audioSrc}
-                    title={`${currentModule.title} - Audio Lesson`}
-                    onError={(error) => setContentError(error)}
-                  />
-                ) : (
-                  <div className="text-center py-16">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                        <Volume2 className={`h-12 w-12 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} />
-                      </div>
-                      <div>
-                        <h3 className={`text-base font-medium mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                          {currentModule.title} Audio
-                        </h3>
-                        <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                          Audio content coming soon
-                        </p>
-                        {contentError && (
-                          <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-red-400' : 'text-red-600'}`}>
-                            {contentError}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>

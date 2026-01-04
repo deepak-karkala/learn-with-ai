@@ -5,8 +5,22 @@ from pathlib import Path
 
 router = APIRouter()
 
-# Get the content directory path relative to the backend
-CONTENT_DIR = Path(__file__).parent.parent.parent.parent / "content"
+def _resolve_content_dir() -> Path:
+    """Resolve content directory with an optional override."""
+    env_dir = os.getenv("CONTENT_DIR", "").strip()
+    if env_dir:
+        return Path(env_dir)
+
+    api_dir = Path(__file__).resolve().parent
+    backend_content = api_dir.parent.parent / "content"
+    repo_content = api_dir.parent.parent.parent / "content"
+
+    if backend_content.exists():
+        return backend_content
+    return repo_content
+
+
+CONTENT_DIR = _resolve_content_dir()
 
 @router.get("/content/{module_id}/tutorial.md")
 async def get_tutorial_content(module_id: str):
